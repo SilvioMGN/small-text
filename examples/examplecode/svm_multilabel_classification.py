@@ -1,26 +1,30 @@
-"""Example of a binary active learning text classification.
+"""Example of an svm multi-label active learning text classification.
 """
 import numpy as np
 
 from small_text.active_learner import PoolBasedActiveLearner
 from small_text.classifiers import ConfidenceEnhancedLinearSVC
 from small_text.classifiers.factories import SklearnClassifierFactory
+from small_text.data.sampling import multilabel_stratified_subsets_sampling
 from small_text.query_strategies import PoolExhaustedException, EmptyPoolException
 from small_text.query_strategies import RandomSampling
 
-from examplecode.data.example_data_binary import get_train_test, preprocess_data
-from examplecode.shared import evaluate
+from examplecode.data.example_data_multilabel import (
+    get_train_test,
+    preprocess_data_sklearn as preprocess_data
+)
+from examplecode.shared import evaluate_multi_label
 
 
 def main():
-    # Prepare some data: The data is a 2-class subset of 20news (baseball vs. hockey)
-    text_train, text_test = get_train_test()
-    train, test = preprocess_data(text_train, text_test)
-    num_classes = 2
+    # Prepare some data: The data is the go-emotions dataset (27 emotions + 1 neutral class)
+    train, test = get_train_test()
+    train, test = preprocess_data(train, test)
+    num_classes = 28
 
     # Active learning parameters
     clf_template = ConfidenceEnhancedLinearSVC()
-    clf_factory = SklearnClassifierFactory(clf_template, num_classes)
+    clf_factory = SklearnClassifierFactory(clf_template, num_classes, kwargs=dict({'multi_label': True}))
     query_strategy = RandomSampling()
 
     # Active learner
@@ -46,7 +50,7 @@ def perform_active_learning(active_learner, train, labeled_indices, test):
     # Perform 10 iterations of active learning...
     for i in range(10):
         # ...where each iteration consists of labelling 20 samples
-        q_indices = active_learner.query(num_samples=20)
+        q_indices = active_learner.query(num_samples=100)
 
         # Simulate user interaction here. Replace this for real-world usage.
         y = train.y[q_indices]
@@ -57,20 +61,15 @@ def perform_active_learning(active_learner, train, labeled_indices, test):
         labeled_indices = np.concatenate([q_indices, labeled_indices])
 
         print('Iteration #{:d} ({} samples)'.format(i, len(labeled_indices)))
-        evaluate(active_learner, train[labeled_indices], test)
+        evaluate_multi_label(active_learner, train[labeled_indices], test)
 
 
 def initialize_active_learner(active_learner, y_train):
 
     # Initialize the model - This is required for model-based query strategies.
-    indices_pos_label = np.where(y_train == 1)[0]
-    indices_neg_label = np.where(y_train == 0)[0]
+    x_indices_initial = multilabel_stratified_subsets_sampling(y_train, n_samples=200)
 
-    x_indices_initial = np.concatenate([np.random.choice(indices_pos_label, 10, replace=False),
-                                        np.random.choice(indices_neg_label, 10, replace=False)])
-
-    x_indices_initial = x_indices_initial.astype(int)
-    y_initial = [y_train[i] for i in x_indices_initial]
+    y_initial = y_train[x_indices_initial]
 
     active_learner.initialize_data(x_indices_initial, y_initial)
 

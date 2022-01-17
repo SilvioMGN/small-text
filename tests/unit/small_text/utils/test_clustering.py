@@ -6,7 +6,7 @@ from unittest.mock import patch
 from small_text.utils.clustering import init_kmeans_plusplus_safe
 
 
-class ClusteringTest(unittest.TestCase):
+class ClusteringUtilsTest(unittest.TestCase):
 
     @patch('small_text.utils.clustering.warnings.warn')
     @patch('small_text.utils.clustering.choice')

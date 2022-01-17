@@ -8,6 +8,7 @@ from unittest import mock
 from unittest.mock import patch
 
 from parameterized import parameterized_class
+from scipy.sparse import issparse
 
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
 from tests.utils.datasets import twenty_news_transformers
@@ -29,6 +30,7 @@ except (ImportError, PytorchNotFoundError):
     pass
 
 
+@pytest.mark.skip
 @pytest.mark.pytorch
 @parameterized_class([{'embedding_method': 'avg', 'num_classes': 2},
                       {'embedding_method': 'cls', 'num_classes': 2},
@@ -138,33 +140,40 @@ class EmbeddingTest(unittest.TestCase):
 
 
 @pytest.mark.pytorch
-class ClassificationTest(unittest.TestCase):
+@parameterized_class([{'multi_label': True},
+                      {'multi_label': False}])
+class TransformerBasedClassificationTest(unittest.TestCase):
+
+    def _get_dataset(self, num_samples=100, num_classes=4):
+        return random_transformer_dataset(num_samples, max_length=60, num_classes=num_classes,
+                                          multi_label=self.multi_label)
 
     @patch.object(TransformerBasedClassification, '_train')
     @patch.object(TransformerBasedClassification, '_select_best_model')
     def test_fit(self, select_best_model_mock, fake_train):
-        clf_factory = TransformerBasedClassificationFactory(
-            TransformerModelArguments('sshleifer/tiny-distilroberta-base'),
-            2)
+        model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
+        clf = TransformerBasedClassification(model_args,
+                                             4,
+                                             multi_label=self.multi_label,
+                                             num_epochs=1)
 
-        x = twenty_news_transformers(20, num_labels=2)
-
-        clf = clf_factory.new()
-        clf.fit(x)
+        train_set = self._get_dataset(num_samples=20)
+        clf.fit(train_set)
 
         # basically tests _get_layer_params for now
-
+ 
         fake_train.assert_called()
         select_best_model_mock.assert_called()
 
     def test_fit_with_class_weight(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,
-                                             2,
+                                             4,
+                                             multi_label=self.multi_label,
                                              class_weight='balanced',
                                              num_epochs=1)
 
-        train_set = twenty_news_transformers(20, num_labels=2)
+        train_set = self._get_dataset(num_samples=20)
         clf.fit(train_set)
         self.assertIsNotNone(clf.class_weights_)
         self.assertIsNotNone(clf.model)
@@ -173,7 +182,9 @@ class ClassificationTest(unittest.TestCase):
         sub_train = random_transformer_dataset(10)
 
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
-        classifier = TransformerBasedClassification(model_args, 2,
+        classifier = TransformerBasedClassification(model_args,
+                                                    3,
+                                                    multi_label=self.multi_label,
                                                     class_weight='balanced')
 
         base_lr = 2e-5
@@ -205,7 +216,9 @@ class ClassificationTest(unittest.TestCase):
         sub_train = random_transformer_dataset(10)
 
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
-        classifier = TransformerBasedClassification(model_args, 2,
+        classifier = TransformerBasedClassification(model_args,
+                                                    3,
+                                                    multi_label=self.multi_label,
                                                     class_weight='balanced')
 
         base_lr = 2e-5
@@ -238,19 +251,25 @@ class ClassificationTest(unittest.TestCase):
     def test_predict_and_validate(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,
-                                             2,
+                                             4,
+                                             multi_label=self.multi_label,
                                              class_weight='balanced',
                                              num_epochs=1)
 
-        train_set = twenty_news_transformers(20, num_labels=2)
-        test_set = twenty_news_transformers(10, num_labels=2)
-        valid_set = twenty_news_transformers(5, num_labels=2)
+        train_set = self._get_dataset(num_samples=20)
+        test_set = self._get_dataset(num_samples=10)
+        valid_set = self._get_dataset(num_samples=5)
 
         clf.fit(train_set)
         y_pred = clf.predict(test_set)
-        self.assertTrue(isinstance(y_pred, np.ndarray))
-        self.assertTrue(np.all([isinstance(y, np.int64) for y in y_pred]))
-        self.assertTrue(np.logical_or(y_pred.all() == 0, y_pred.all() == 1))
+        if self.multi_label:
+            self.assertTrue(issparse(y_pred))
+            self.assertEqual(y_pred.dtype, np.int64)
+            self.assertTrue(np.logical_or(y_pred.indices.all() >= 0, y_pred.indices.all() <= 3))
+        else:
+            self.assertTrue(isinstance(y_pred, np.ndarray))
+            self.assertTrue(np.all([isinstance(y, np.int64) for y in y_pred]))
+            self.assertTrue(np.logical_or(y_pred.all() >= 0, y_pred.all() <= 3))
 
         valid_loss, valid_acc = clf.validate(valid_set)
         self.assertTrue(valid_loss >= 0)
@@ -259,12 +278,13 @@ class ClassificationTest(unittest.TestCase):
     def test_validate_with_validations_per_epoch(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,
-                                             2,
+                                             4,
+                                             multi_label=self.multi_label,
                                              num_epochs=1,
                                              mini_batch_size=10,
                                              validations_per_epoch=2)
 
-        train_set = twenty_news_transformers(20, num_labels=2)
+        train_set = self._get_dataset(num_samples=20)
 
         with patch.object(clf, 'validate', wraps=clf.validate) as validate_spy:
             clf.fit(train_set)
@@ -275,12 +295,13 @@ class ClassificationTest(unittest.TestCase):
     def test_validate_with_validations_per_epoch_too_large(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,
-                                             2,
+                                             4,
+                                             multi_label=self.multi_label,
                                              num_epochs=1,
                                              mini_batch_size=20,
                                              validations_per_epoch=2)
 
-        train_set = twenty_news_transformers(20, num_labels=2)
+        train_set = self._get_dataset(num_samples=20)
 
         with patch.object(clf, 'validate', wraps=clf.validate) as validate_spy, \
                 warnings.catch_warnings(record=True) as w:
@@ -295,4 +316,3 @@ class ClassificationTest(unittest.TestCase):
                 str(w_.message) == expected_warning and w_.category == RuntimeWarning
                 for w_ in w])
             self.assertTrue(found_warning)
-            self.assertTrue(issubclass(w[0].category, RuntimeWarning))

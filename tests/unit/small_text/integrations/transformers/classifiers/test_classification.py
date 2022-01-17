@@ -2,10 +2,15 @@ import unittest
 import pytest
 import warnings
 
+import numpy as np
+
 from unittest.mock import patch
+
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
+from small_text.utils.logging import VERBOSITY_MORE_VERBOSE
 
 try:
+    from torch.optim.lr_scheduler import LambdaLR
     from torch.nn.modules import BCEWithLogitsLoss
 
     from small_text.integrations.transformers.classifiers.classification import \
@@ -56,10 +61,62 @@ class TestTransformerModelArguments(unittest.TestCase):
 class TestTransformerBasedClassification(unittest.TestCase):
 
     def test_init(self):
-        num_classes = 2
         model_args = TransformerModelArguments('bert-base-uncased')
+        num_classes = 2
         classifier = TransformerBasedClassification(model_args, num_classes)
         self.assertEqual(num_classes, classifier.num_classes)
+        self.assertFalse(classifier.multi_label)
+        self.assertEqual(10, classifier.num_epochs)
+        self.assertEqual(2e-5, classifier.lr)
+        self.assertEqual(12, classifier.mini_batch_size)
+        self.assertIsNone(classifier.criterion)
+        self.assertEqual(0.1, classifier.validation_set_size)
+        self.assertEqual(1, classifier.validations_per_epoch)
+        self.assertEqual('sample', classifier.no_validation_set_action)
+        self.assertIsNone(classifier.initial_model_selection)
+        self.assertEqual(5, classifier.early_stopping_no_improvement)
+        self.assertEqual(-1, classifier.early_stopping_acc)
+        self.assertTrue(classifier.model_selection)
+        self.assertIsNone(classifier.fine_tuning_arguments)
+        self.assertIsNotNone(classifier.device)
+        self.assertEqual(1, classifier.memory_fix)
+        self.assertIsNone(classifier.class_weight)
+        self.assertEqual(VERBOSITY_MORE_VERBOSE, classifier.verbosity)
+        self.assertEqual('.active_learning_lib_cache/', classifier.cache_dir)
+
+    def test_init_parameters(self):
+        model_args = TransformerModelArguments('bert-base-uncased')
+        num_classes = 3
+        multi_label = False
+        num_epochs = 20
+        lr = 1e-5
+        mini_batch_size = 24
+        criterion = BCEWithLogitsLoss()
+        validation_set_size = 0.05
+        validations_per_epoch = 5
+        no_validation_set_action = 'sample'
+
+        classifier = TransformerBasedClassification(model_args,
+                                                    num_classes,
+                                                    num_epochs=num_epochs,
+                                                    lr=lr,
+                                                    mini_batch_size=mini_batch_size,
+                                                    criterion=criterion,
+                                                    validation_set_size=validation_set_size,
+                                                    validations_per_epoch=validations_per_epoch,
+                                                    no_validation_set_action=no_validation_set_action)
+
+        self.assertEqual(num_classes, classifier.num_classes)
+        self.assertEqual(multi_label, classifier.multi_label)
+        self.assertEqual(num_epochs, classifier.num_epochs)
+        self.assertEqual(lr, classifier.lr)
+        self.assertEqual(mini_batch_size, classifier.mini_batch_size)
+        self.assertEqual(criterion, classifier.criterion)
+        self.assertEqual(validation_set_size, classifier.validation_set_size)
+        self.assertEqual(validations_per_epoch, classifier.validations_per_epoch)
+        self.assertEqual(no_validation_set_action, classifier.no_validation_set_action)
+        self.assertIsNone(classifier.initial_model_selection)
+        # TODO: incomplete
 
     def test_init_with_non_default_criterion_and_class_weighting(self):
         num_classes = 2
@@ -73,15 +130,24 @@ class TestTransformerBasedClassification(unittest.TestCase):
             self.assertEqual(1, len(w))
             self.assertTrue(issubclass(w[0].category, RuntimeWarning))
 
-    @pytest.mark.skip(reason='reevaluate if None is plausible')
-    def test_fit_where_y_is_none(self):
-        dataset = random_transformer_dataset(10)
-        dataset.y = [None] * 10
+    def test_fit_where_y_train_is_negative(self):
+        train_set = random_transformer_dataset(10)
+        train_set.y = [-1] * 10
 
         model_args = TransformerModelArguments('bert-base-uncased')
         classifier = TransformerBasedClassification(model_args, 2)
-        with self.assertRaises(ValueError):
-            classifier.fit(dataset)
+        with self.assertRaisesRegex(ValueError, 'Training labels must be labeled'):
+            classifier.fit(train_set)
+
+    def test_fit_where_y_valid_is_negative(self):
+        train_set = random_transformer_dataset(8)
+        validation_set = random_transformer_dataset(2)
+        validation_set.y = [-1] * 2
+
+        model_args = TransformerModelArguments('bert-base-uncased')
+        classifier = TransformerBasedClassification(model_args, 2)
+        with self.assertRaisesRegex(ValueError, 'Validation set labels must be labeled'):
+            classifier.fit(train_set, validation_set=validation_set)
 
     def test_fit_without_validation_set(self):
         dataset = random_transformer_dataset(10)
@@ -128,12 +194,24 @@ class TestTransformerBasedClassification(unittest.TestCase):
             fit_main_mock.assert_called()
             self.assertIsNotNone(classifier.class_weights_)
 
-    @pytest.mark.skip(reason='reevaluate if None is plausible')
-    def test_fit_with_validation_set_but_missing_labels(self):
-        train = random_transformer_dataset(8)
-        valid = random_transformer_dataset(2)
-        valid.y = [None] * len(valid)
+    def test_predict_on_empty_data(self):
+        test_set = TransformersDataset([], None)
 
-        classifier = TransformerBasedClassification('bert-base-uncased', 2)
-        with self.assertRaises(ValueError):
-            classifier.fit(train, validation_set=valid)
+        model_args = TransformerModelArguments('bert-base-uncased')
+        clf = TransformerBasedClassification(model_args, 2)
+        # here would be a clf.fit call, which omit due to the runtime costs
+
+        predictions = clf.predict(test_set)
+        self.assertEqual(0, predictions.shape[0])
+        self.assertTrue(np.issubdtype(predictions.dtype, np.integer))
+
+    def test_predict_proba_on_empty_data(self):
+        test_set = TransformersDataset([], None)
+
+        model_args = TransformerModelArguments('bert-base-uncased')
+        clf = TransformerBasedClassification(model_args, 2)
+        # here would be a clf.fit call, which omit due to the runtime costs
+
+        proba = clf.predict_proba(test_set)
+        self.assertEqual(0, proba.shape[0])
+        self.assertTrue(np.issubdtype(proba.dtype, np.float))

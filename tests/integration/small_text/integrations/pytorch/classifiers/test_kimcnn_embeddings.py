@@ -12,7 +12,6 @@ try:
     import torch
     from small_text.integrations.pytorch.classifiers.kimcnn import KimCNNClassifier
     from small_text.integrations.pytorch.classifiers.kimcnn import KimCNNEmbeddingMixin
-    from small_text.integrations.pytorch.datasets import PytorchTextClassificationDataset
     from tests.utils.datasets import trec_dataset
 except PytorchNotFoundError:
     pass
@@ -60,12 +59,12 @@ class KimCNNEmbeddingTest(unittest.TestCase):
 
             self.assertEqual(len(train), embeddings.shape[0])
             if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
-                gradient_length = classifier.model.out_channels * classifier.model.n_kernels \
+                gradient_length = classifier.model.out_channels * classifier.model.num_kernels \
                                   * classifier.model.num_classes
                 self.assertEqual(classifier.num_class * gradient_length,
                                  embeddings.shape[1])
             else:
-                self.assertEqual(classifier.model.out_channels * classifier.model.n_kernels,
+                self.assertEqual(classifier.model.out_channels * classifier.model.num_kernels,
                                  embeddings.shape[1])
 
     def test_embed_and_predict(self):
@@ -94,11 +93,11 @@ class KimCNNEmbeddingTest(unittest.TestCase):
 
             self.assertEqual(len(train), embeddings.shape[0])
             if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
-                gradient_length = classifier.model.out_channels * classifier.model.n_kernels \
+                gradient_length = classifier.model.out_channels * classifier.model.num_kernels \
                                   * classifier.model.num_classes
                 self.assertEqual(classifier.num_class * gradient_length,
                                  embeddings.shape[1])
             else:
-                self.assertEqual(classifier.model.out_channels * classifier.model.n_kernels,
+                self.assertEqual(classifier.model.out_channels * classifier.model.num_kernels,
                                  embeddings.shape[1])
             self.assertEqual(len(train), predictions.shape[0])

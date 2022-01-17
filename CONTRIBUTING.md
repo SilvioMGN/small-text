@@ -6,7 +6,7 @@
 
 ## Development
 
-### Conventions
+### Code Conventions
 
 1. Code style should adhere to the [.flake8 config](.flake8) (except in justified cases).
 
@@ -23,6 +23,14 @@ pip install sphinx sphinx-rtd-theme
 cd docs/
 make
 ```
+
+
+## Documentation Conventions
+
+### Spellings
+
+- multi-label instead of multi label (analogous: multi-class)
+- dataset instead of data set (but: train set, test set)
 
 ## Contributors
 

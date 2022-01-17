@@ -41,9 +41,6 @@ class SerializationTest(unittest.TestCase):
             ind_initial = active_learner.x_indices_labeled
             ind = active_learner.query()
 
-            # TODO: reconsider if this makes sense
-            #self.assertTrue(next(active_learner.classifier.model.parameters()).is_cuda)
-
             active_learner.update(np.random.randint(2, size=10))
             weights_before = list(active_learner.classifier.model.parameters())
 
