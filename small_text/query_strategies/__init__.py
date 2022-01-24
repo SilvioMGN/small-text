@@ -1,3 +1,4 @@
+from small_text.query_strategies.base import constraints, ClassificationType  # noqa:F401
 from small_text.query_strategies.exceptions import (EmptyPoolException,  # noqa:F401
                                                     QueryException,
                                                     PoolExhaustedException)

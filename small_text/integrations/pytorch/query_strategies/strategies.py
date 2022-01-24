@@ -1,7 +1,10 @@
 import numpy as np
 
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
-from small_text.query_strategies import QueryStrategy, EmbeddingBasedQueryStrategy
+from small_text.query_strategies import (
+    constraints,
+    QueryStrategy,
+    EmbeddingBasedQueryStrategy)
 from small_text.utils.clustering import init_kmeans_plusplus_safe
 from small_text.utils.context import build_pbar_context
 from small_text.utils.data import list_length
@@ -35,6 +38,7 @@ class ExpectedGradientLength(QueryStrategy):
 
         self.scores_ = None
 
+    @constraints(classification_type='single-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10, pbar=None):
         self._validate_query_input(x_indices_unlabeled, n)
 
@@ -174,6 +178,7 @@ class ExpectedGradientLengthMaxWord(ExpectedGradientLength):
         # tensor that contains the unique word is for each item in the batch
         self._words = None
 
+    @constraints(classification_type='single-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10, pbar=None):
 
         assert_layer_exists(clf.model, self.layer_name)
