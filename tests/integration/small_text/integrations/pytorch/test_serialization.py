@@ -11,13 +11,14 @@ from small_text.active_learner import PoolBasedActiveLearner
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
 from small_text.query_strategies import RandomSampling
 
-from tests.utils.datasets import trec_dataset
 from tests.utils.object_factory import get_initialized_active_learner
 
 try:
     import torch
     from small_text.integrations.pytorch.classifiers import KimCNNFactory
     from small_text.integrations.pytorch.datasets import PytorchTextClassificationDataset
+
+    from tests.utils.datasets import random_text_classification_dataset
 except (ImportError, PytorchNotFoundError):
     pass
 
@@ -26,7 +27,7 @@ except (ImportError, PytorchNotFoundError):
 class SerializationTest(unittest.TestCase):
 
     def test_and_load_with_file_str(self):
-        dataset, _ = trec_dataset()
+        dataset = random_text_classification_dataset(num_samples=100, num_classes=6)
         self.assertFalse(dataset._data[0][PytorchTextClassificationDataset.INDEX_TEXT].is_cuda)
 
         clf_factory = KimCNNFactory('kimcnn',

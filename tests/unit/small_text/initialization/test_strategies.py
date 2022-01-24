@@ -89,6 +89,18 @@ class RandomInitializationBalancedTest(unittest.TestCase):
         self.assertEqual(10, len(np.unique(indices)))
         self.assertEqual(4, len(np.unique(stratified_labels)))
 
+    def test_random_initialization_balanced_multilabel(self):
+        y = np.array([[0, 0, 0, 0]]*10
+                     + [[0, 0, 0, 1]]*10
+                     + [[0, 0, 1, 0]]*10
+                     + [[0, 1, 0, 0]]*10
+                     + [[0, 1, 0, 1]]*10
+                     + [[1, 0, 0, 0]]*50)
+        y = csr_matrix(y)
+
+        with self.assertRaises(NotImplementedError):
+            random_initialization_balanced(y)
+
     def test_random_initialization_balanced_num_samples_too_large(self):
         y = [0]*25 + [1]*25 + [2]*25 + [3]*25
 

@@ -2,6 +2,7 @@ import numpy as np
 
 from small_text.active_learner import PoolBasedActiveLearner
 
+
 def get_initialized_active_learner(clf_factory, query_strategy, dataset):
 
     active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, dataset)

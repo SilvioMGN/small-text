@@ -19,7 +19,7 @@ from small_text.utils.classification import prediction_result
 from small_text.utils.context import build_pbar_context
 from small_text.utils.data import check_training_data
 from small_text.utils.data import list_length
-from small_text.utils.labels import csr_to_list
+from small_text.utils.labels import csr_to_list, get_num_labels
 from small_text.utils.datetime import format_timedelta
 from small_text.utils.logging import verbosity_logger, VERBOSITY_MORE_VERBOSE
 
@@ -153,10 +153,10 @@ class KimCNNEmbeddingMixin(EmbeddingMixin):
 class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
 
     def __init__(self, num_classes, multi_label=False, embedding_matrix=None, device=None,
-                 num_epochs=10, mini_batch_size=25, criterion=None, optimizer=None,
-                 lr=0.001, max_seq_len=60, out_channels=100, dropout=0.5, validation_set_size=0.1,
-                 padding_idx=0, kernel_heights=[3, 4, 5], early_stopping=5, early_stopping_acc=0.98,
-                 class_weight=None, verbosity=VERBOSITY_MORE_VERBOSE):
+                 num_epochs=10, mini_batch_size=25, lr=0.001, max_seq_len=60, out_channels=100,
+                 dropout=0.5, validation_set_size=0.1, padding_idx=0, kernel_heights=[3, 4, 5],
+                 early_stopping=5, early_stopping_acc=0.98, class_weight=None,
+                 verbosity=VERBOSITY_MORE_VERBOSE):
 
         super().__init__(multi_label=multi_label, device=device)
 
@@ -167,16 +167,13 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         if embedding_matrix is None:
             raise ValueError('This implementation requires an embedding matrix.')
 
-        if criterion is not None and class_weight is not None:
-            warnings.warn('Class weighting will have no effect with a non-default criterion',
-                          RuntimeWarning)
-
         # Training parameters
         self.num_classes = num_classes
         self.num_epochs = num_epochs
         self.mini_batch_size = mini_batch_size
-        self.criterion = criterion
-        self.optimizer = optimizer
+        self.criterion = None
+        self.optimizer = None
+        self.scheduler = 'linear'
         self.lr = lr
         self.class_weight = class_weight
 
@@ -196,7 +193,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         self.model_selection = None
         self.enc_ = None
 
-    def fit(self, train_set, validation_set=None, **kwargs):
+    def fit(self, train_set, validation_set=None, criterion=None, optimizer=None, scheduler=None):
         """
         Trains the model using the given train set.
 
@@ -208,6 +205,10 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
             A validation set used for validation during training, or `None`. If `None`, the fit
             operation will split apart a subset of the trainset as a validation set, whose size
             is set by `self.validation_set_size`.
+        optimizer :
+
+        scheduler :
+
 
         Returns
         -------
@@ -216,8 +217,15 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         """
         check_training_data(train_set, validation_set)
 
+        if criterion is not None and self.class_weight is not None:
+            warnings.warn('Class weighting will have no effect with a non-default criterion',
+                          RuntimeWarning)
+
         sub_train, sub_valid = get_splits(train_set, validation_set, multi_label=self.multi_label,
                                           validation_set_size=self.validation_set_size)
+
+        fit_scheduler = scheduler if scheduler is not None else self.scheduler
+        fit_optimizer = optimizer if optimizer is not None else self.optimizer
 
         if self.multi_label:
             self.enc_ = MultiLabelBinarizer()
@@ -226,26 +234,27 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
 
         self.class_weights_ = self.initialize_class_weights(sub_train)
 
-        return self._fit_main(sub_train, sub_valid)
+        return self._fit_main(sub_train, sub_valid, fit_optimizer, fit_scheduler)
 
-    def _fit_main(self, sub_train, sub_valid):
-        embed_dim = self.embedding_matrix.shape[1]
-
+    def _fit_main(self, sub_train, sub_valid, optimizer, scheduler):
         if self.model is None:
-            vocab_size = len(sub_train.vocab)
-            # TODO: there is self.num_class and self.num_classes
-            self.num_class = sub_train.target_labels.shape[0]
-            self.model = KimCNN(vocab_size, self.max_seq_len, num_classes=self.num_class,
-                                dropout=self.dropout, out_channels=self.out_channels,
-                                embedding_matrix=self.embedding_matrix,
-                                embed_dim=embed_dim,
-                                freeze_embedding_layer=False, padding_idx=self.padding_idx,
-                                kernel_heights=self.kernel_heights)
+            encountered_num_classes = get_num_labels(sub_train.y)
 
-            if self.criterion is None:
-                self.criterion = self.get_default_criterion()
-            if self.optimizer is None:
-                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+            if self.num_classes is None:
+                self.num_classes = encountered_num_classes
+
+            if self.num_classes != encountered_num_classes:
+                raise ValueError('Conflicting information about the number of classes: '
+                                 'expected: {}, encountered: {}'.format(self.num_classes,
+                                                                        encountered_num_classes))
+
+            self.initialize_kimcnn_model(sub_train)
+
+        if self.criterion is None:
+            self.criterion = self.get_default_criterion()
+
+        if self.optimizer is None:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         self.model = self.model.to(self.device)
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -255,6 +264,19 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
             self.model.load_state_dict(torch.load(model_path))
 
         return res
+
+    def initialize_kimcnn_model(self, sub_train):
+        vocab_size = len(sub_train.vocab)
+
+        # TODO: there is self.num_class and self.num_classes
+        self.num_class = sub_train.target_labels.shape[0]
+        embed_dim = self.embedding_matrix.shape[1]
+        self.model = KimCNN(vocab_size, self.max_seq_len, num_classes=self.num_class,
+                            dropout=self.dropout, out_channels=self.out_channels,
+                            embedding_matrix=self.embedding_matrix,
+                            embed_dim=embed_dim,
+                            freeze_embedding_layer=False, padding_idx=self.padding_idx,
+                            kernel_heights=self.kernel_heights)
 
     def _train(self, sub_train, sub_valid, tmp_dir):
 

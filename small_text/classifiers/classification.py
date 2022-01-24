@@ -73,11 +73,11 @@ class SklearnClassifier(Classifier):
         """
         y = train_set.y
         if self.multi_label and not is_multilabel(y):
-            raise ValueError(f'Invalid input: Given labeling must be recognized as '
-                             f'multi-label according to sklearn.utils.multilabel.is_multilabel(y)')
+            raise ValueError('Invalid input: Given labeling must be recognized as '
+                             'multi-label according to sklearn.utils.multilabel.is_multilabel(y)')
         elif not self.multi_label and is_multilabel(y):
-            raise ValueError(f'Invalid input: Given labeling is recognized as multi-label labeling '
-                             f'but the classifier is set to single-label mode')
+            raise ValueError('Invalid input: Given labeling is recognized as multi-label labeling '
+                             'but the classifier is set to single-label mode')
 
         self.model.fit(train_set.x, y)
         return self

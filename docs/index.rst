@@ -18,6 +18,7 @@ Getting Started
    install
    active_learning
    data_structures
+   classification
 
 For now, the best way to get started is the `examples/ <https://github.com/webis-de/small-text/tree/master/examples>`_ folder in the github directory.
 
@@ -68,6 +69,10 @@ such as :doc:`patterns/pool` and :doc:`patterns/serialization`.
    patterns/serialization
 
 
+Extensions
+==========
+
+
 API
 ===
 
@@ -77,9 +82,11 @@ API
    :hidden:
 
    api/active_learner
+   api/classifier
    api/data_set
 
 :doc:`api/active_learner`
+:doc:`api/classifier`
 :doc:`api/data_set`
 
 

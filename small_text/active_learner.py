@@ -36,10 +36,10 @@ class AbstractPoolBasedActiveLearner(ActiveLearner):
 
     @abstractmethod
     def initialize_data(self, x_indices_initial, y_initial, *args, **kwargs):
-        """
-        Initializes the pool and existing labelings.
+        """(Re-)Initializes the current labeled pool.
 
-        This methods needs to be called whenever the underlying data changes, in particularly before the first loop.
+        This methods needs to be called whenever the underlying data changes, in particularly
+        before the first loop.
 
         Parameters
         ----------
@@ -63,8 +63,8 @@ class AbstractPoolBasedActiveLearner(ActiveLearner):
 
 
 class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
-    """
-    A pool-based active learner in which a pool holds all available unlabeled data.
+    """A pool-based active learner in which a pool holds all available unlabeled data.
+
     It uses a classifier, a query strategy and manages the mutually exclusive partition over the
     whole training data into labeled and unlabeled.
 
@@ -114,8 +114,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
 
     def initialize_data(self, x_indices_initial, y_initial, x_indices_ignored=None, x_indices_validation=None,
                         retrain=True):
-        """
-        (Re-)Initializes the current labeled pool.
+        """(Re-)Initializes the current labeled pool.
 
         This is required once before the first `query()` call, and whenever the labeled pool
         is changed from the outside, i.e. when `self.x_train` changes.
@@ -155,8 +154,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             self._retrain(x_indices_validation=x_indices_validation)
 
     def query(self, num_samples=10, x=None, query_strategy_kwargs=None):
-        """
-        Performs a query step, which selects a number of samples from the unlabeled pool.
+        """Performs a query step, which selects a number of samples from the unlabeled pool.
         A query step must be followed by an update step.
 
         Parameters
@@ -203,8 +201,9 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         return self.queried_indices
 
     def update(self, y, x_indices_validation=None):
-        """
-        Performs an update step, which passes the label for each of the previously queried indices.
+        """Performs an update step, which passes the label for each of the
+        previously queried indices.
+
         An update step must be preceded by a query step. At the end of the update step the
         current model is retrained using all available labels.
 
@@ -246,8 +245,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         self.mask = None
 
     def update_label_at(self, x_index, y, retrain=False, x_indices_validation=None):
-        """
-        Updates the label for the given x_index (with regard to `self.x_train`).
+        """Updates the label for the given x_index (with regard to `self.x_train`).
 
         Notes
         -----
@@ -258,15 +256,14 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         Parameters
         ----------
         x_index : int
-            Label index for the label to be updated.
+            Data index (relative to `self.x_train`) for which the label should be updated.
         y : int
-            New label.
+            The new label to be assigned for `self.x_indices_labeled[x_index]`.
         retrain : bool
             Retrains the model after the update if True.
         x_indices_validation : numpy.ndarray
             The given indices (relative to `self.x_indices_labeled`) define a custom validation set
-            if provided. Otherwise each classifier that uses a validation set will be responsible
-            for creating a validation set.
+            if provided. This is only used if `retrain` is `True`.
         """
         position = self._label_to_position[x_index]
         self.y[position] = y
@@ -275,8 +272,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             self._retrain(x_indices_validation=x_indices_validation)
 
     def remove_label_at(self, x_index, retrain=False, x_indices_validation=None):
-        """
-        Removes the labeling for the given x_index (with regard to `self.x_train`).
+        """Removes the labeling for the given x_index (with regard to `self.x_train`).
 
         Notes
         -----
@@ -287,13 +283,12 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         Parameters
         ----------
         x_index : int
-            Label index for the label to be removed.
+            Data index (relative to `self.x_train`) for which the label should be removed.
         retrain : bool
-            Retrains the model after the removal if True.
+            Retrains the model after removal if True.
         x_indices_validation : numpy.ndarray
             The given indices (relative to `self.x_indices_labeled`) define a custom validation set
-            if provided. Otherwise each classifier that uses a validation set will be responsible
-            for creating a validation set.
+            if provided. This is only used if `retrain` is `True`.
         """
 
         position = self._label_to_position[x_index]
@@ -304,25 +299,26 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             self._retrain(x_indices_validation=x_indices_validation)
 
     def ignore_sample_at(self, x_index, retrain=False, x_indices_validation=None):
-        """
-        Ignores the sample at the given `x_index. Any labels previously assigned to this sample will also be removed.
+        """Ignores the sample at the given `x_index.
+
+        Any labels which had previously been assigned to this sample will be removed.
 
         Notes
         -----
-        After removing labels the current model might not reflect the labeled data anymore.
-        You should consider if a retraining is necessary when using this operation.
-        Since retraining is often time-consuming, `retrain` is set to `False` by default.
+        If ignoring a sample incurs the removal of a label label, the current model might not
+        reflect the labeled data anymore. You should consider if a retraining is necessary when
+        using this operation. Since retraining is often time-consuming, `retrain` is set to
+        `False` by default.
 
         Parameters
         ----------
         x_index : int
-            Label index for the label to be removed.
+           Data index (relative to `self.x_train`) for which the label should be ignored.
         retrain : bool
             Retrains the model after the removal if True.
         x_indices_validation : numpy.ndarray
             The given indices (relative to `self.x_indices_labeled`) define a custom validation set
-            if provided. Otherwise each classifier that uses a validation set will be responsible
-            for creating a validation set.
+            if provided. This is only used if `retrain` is `True`.
         """
 
         labeling_exists = x_index in self._label_to_position
@@ -337,8 +333,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             self._retrain(x_indices_validation=x_indices_validation)
 
     def save(self, file):
-        """
-        Serializes the current active learner object into a single file for later re-use.
+        """Serializes the current active learner object into a single file for later re-use.
 
         Parameters
         ----------
@@ -358,8 +353,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
 
     @classmethod
     def load(cls, file):
-        """
-        Deserializes a serialized active learner.
+        """Deserializes a serialized active learner.
 
         Parameters
         ----------
@@ -373,7 +367,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             return cls._load(file)
 
     @classmethod
-    def _load(self, file_handle):
+    def _load(cls, file_handle):
         import dill as pickle
         _ = pickle.load(file_handle)  # version, will be used in the future
         return pickle.load(file_handle)

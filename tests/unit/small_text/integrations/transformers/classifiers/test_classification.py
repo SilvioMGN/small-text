@@ -1,6 +1,5 @@
 import unittest
 import pytest
-import warnings
 
 import numpy as np
 
@@ -91,7 +90,6 @@ class TestTransformerBasedClassification(unittest.TestCase):
         num_epochs = 20
         lr = 1e-5
         mini_batch_size = 24
-        criterion = BCEWithLogitsLoss()
         validation_set_size = 0.05
         validations_per_epoch = 5
         no_validation_set_action = 'sample'
@@ -101,7 +99,6 @@ class TestTransformerBasedClassification(unittest.TestCase):
                                                     num_epochs=num_epochs,
                                                     lr=lr,
                                                     mini_batch_size=mini_batch_size,
-                                                    criterion=criterion,
                                                     validation_set_size=validation_set_size,
                                                     validations_per_epoch=validations_per_epoch,
                                                     no_validation_set_action=no_validation_set_action)
@@ -111,24 +108,11 @@ class TestTransformerBasedClassification(unittest.TestCase):
         self.assertEqual(num_epochs, classifier.num_epochs)
         self.assertEqual(lr, classifier.lr)
         self.assertEqual(mini_batch_size, classifier.mini_batch_size)
-        self.assertEqual(criterion, classifier.criterion)
         self.assertEqual(validation_set_size, classifier.validation_set_size)
         self.assertEqual(validations_per_epoch, classifier.validations_per_epoch)
         self.assertEqual(no_validation_set_action, classifier.no_validation_set_action)
         self.assertIsNone(classifier.initial_model_selection)
         # TODO: incomplete
-
-    def test_init_with_non_default_criterion_and_class_weighting(self):
-        num_classes = 2
-        criterion = BCEWithLogitsLoss()
-
-        with warnings.catch_warnings(record=True) as w:
-            model_args = TransformerModelArguments('bert-base-uncased')
-            TransformerBasedClassification(model_args, num_classes, criterion=criterion,
-                                           class_weight='balanced')
-
-            self.assertEqual(1, len(w))
-            self.assertTrue(issubclass(w[0].category, RuntimeWarning))
 
     def test_fit_where_y_train_is_negative(self):
         train_set = random_transformer_dataset(10)
@@ -147,6 +131,21 @@ class TestTransformerBasedClassification(unittest.TestCase):
         model_args = TransformerModelArguments('bert-base-uncased')
         classifier = TransformerBasedClassification(model_args, 2)
         with self.assertRaisesRegex(ValueError, 'Validation set labels must be labeled'):
+            classifier.fit(train_set, validation_set=validation_set)
+
+    def test_fit_with_label_information_mismatch(self):
+        num_classes_configured = 3
+        num_classes_to_be_encountered = 2
+
+        train_set = random_transformer_dataset(8, num_classes=num_classes_to_be_encountered)
+        validation_set = random_transformer_dataset(2, num_classes=num_classes_to_be_encountered)
+
+        model_args = TransformerModelArguments('bert-base-uncased')
+        classifier = TransformerBasedClassification(model_args, num_classes_configured)
+
+        with self.assertRaisesRegex(ValueError,
+                                    'Conflicting information about the number of classes: '
+                                    'expected: 3, encountered: 2'):
             classifier.fit(train_set, validation_set=validation_set)
 
     def test_fit_without_validation_set(self):

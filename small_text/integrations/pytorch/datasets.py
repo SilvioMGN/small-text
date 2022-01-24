@@ -65,7 +65,7 @@ class PytorchDatasetView(DatasetView):
             indices = np.arange(len(self._dataset))
             selection = indices[self.selection]
         elif isinstance(self.selection, int):
-            selection [self.selection]
+            selection = [self.selection]
         return [self._dataset.data[i] for i in selection]
 
     @property

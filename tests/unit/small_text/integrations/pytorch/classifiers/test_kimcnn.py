@@ -22,9 +22,9 @@ except PytorchNotFoundError:
 @pytest.mark.pytorch
 class KimCNNTest(unittest.TestCase):
 
-    def _get_clf(self):
+    def _get_clf(self, num_classes=2):
         embedding_matrix = torch.rand(10, 20)
-        return KimCNNClassifier(2, embedding_matrix=embedding_matrix, num_epochs=2, out_channels=15,
+        return KimCNNClassifier(num_classes, embedding_matrix=embedding_matrix, num_epochs=2, out_channels=15,
                                 max_seq_len=20, kernel_heights=[2, 3], device='cpu')
 
     def test_init_default_parameters(self):
@@ -112,18 +112,6 @@ class KimCNNTest(unittest.TestCase):
                              padding_idx=padding_idx, early_stopping=early_stopping,
                              early_stopping_acc=early_stopping_acc)
 
-    def test_init_with_non_default_criterion_and_class_weighting(self):
-        num_classes = 2
-        embedding_matrix = np.random.rand(5, 10)
-        criterion = BCEWithLogitsLoss()
-
-        with warnings.catch_warnings(record=True) as w:
-            KimCNNClassifier(num_classes, embedding_matrix=embedding_matrix, device='cpu',
-                             criterion=criterion, class_weight='balanced')
-
-            self.assertEqual(1, len(w))
-            self.assertTrue(issubclass(w[0].category, RuntimeWarning))
-
     def test_fit_without_validation_set(self):
         dataset = random_text_classification_dataset(10)
         classifier = self._get_clf()
@@ -172,6 +160,20 @@ class KimCNNTest(unittest.TestCase):
         classifier = self._get_clf()
 
         with self.assertRaisesRegex(ValueError, 'Validation set labels must be labeled'):
+            classifier.fit(train_set, validation_set=validation_set)
+
+    def test_fit_with_label_information_mismatch(self):
+        num_classes_configured = 3
+        num_classes_to_be_encountered = 2
+
+        train_set = random_text_classification_dataset(8, num_classes=num_classes_to_be_encountered)
+        validation_set = random_text_classification_dataset(2, num_classes=num_classes_to_be_encountered)
+
+        classifier = self._get_clf(num_classes=num_classes_configured)
+
+        with self.assertRaisesRegex(ValueError,
+                                    'Conflicting information about the number of classes: '
+                                    'expected: 3, encountered: 2'):
             classifier.fit(train_set, validation_set=validation_set)
 
     def test_predict_on_empty_data(self):

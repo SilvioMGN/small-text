@@ -31,10 +31,10 @@ class StratifiedSamplingTest(unittest.TestCase):
         self.assertEqual(10, len(indices))
         self.assertEqual(10, len(np.unique(indices)))
 
-        self.assertTrue(counts[0] >=0 and counts[0] <= 1)
-        self.assertTrue(counts[1] >=1 and counts[1] <= 2)
-        self.assertTrue(counts[2] >=1 and counts[2] <= 2)
-        self.assertTrue(counts[3] >=7 and counts[3] <= 8)
+        self.assertTrue(counts[0] >= 0 and counts[0] <= 1)
+        self.assertTrue(counts[1] >= 1 and counts[1] <= 2)
+        self.assertTrue(counts[2] >= 1 and counts[2] <= 2)
+        self.assertTrue(counts[3] >= 7 and counts[3] <= 8)
 
     def test_stratified_sampling_n_samples(self):
         y = np.array([0] * 25 + [1] * 25 + [2] * 25 + [3] * 25)
@@ -43,7 +43,7 @@ class StratifiedSamplingTest(unittest.TestCase):
         counts = np.bincount(np.array([y[i] for i in indices]))
         self.assertEqual(30, len(indices))
         self.assertEqual(4, len(counts))
-        self.assertEqual(4, len(counts[counts>=7]))
+        self.assertEqual(4, len(counts[counts >= 7]))
 
     def test_stratified_sampling_with_gaps(self):
         y = np.array([0] * 25 + [2] * 25 + [3] * 50)
@@ -52,7 +52,7 @@ class StratifiedSamplingTest(unittest.TestCase):
         counts = np.bincount(np.array([y[i] for i in indices]))
         self.assertEqual(30, len(indices))
         self.assertEqual(4, len(counts))
-        self.assertEqual(3, len(counts[counts>=7]))
+        self.assertEqual(3, len(counts[counts >= 7]))
 
     def test_stratified_sampling_num_samples_too_large(self):
         y = np.array([0]*25 + [1]*25 + [2]*25 + [3]*25)
@@ -96,7 +96,7 @@ class BalancedSamplingTest(unittest.TestCase):
         counts = np.bincount(np.array([y[i] for i in indices]))
         self.assertEqual(30, len(indices))
         self.assertEqual(4, len(counts))
-        self.assertEqual(4, len(counts[counts>=7]))
+        self.assertEqual(4, len(counts[counts >= 7]))
 
     def test_balanced_sampling_with_gaps(self):
         y = [0] * 25 + [2] * 25 + [3] * 50
@@ -105,7 +105,7 @@ class BalancedSamplingTest(unittest.TestCase):
         counts = np.bincount(np.array([y[i] for i in indices]))
         self.assertEqual(30, len(indices))
         self.assertEqual(4, len(counts))
-        self.assertEqual(3, len(counts[counts>=7]))
+        self.assertEqual(3, len(counts[counts >= 7]))
 
     def test_balanced_sampling_num_samples_too_large(self):
         y = [0]*25 + [1]*25 + [2]*25 + [3]*25

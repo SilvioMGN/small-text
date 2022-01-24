@@ -26,7 +26,6 @@ try:
     import torch
     import torch.nn.functional as F
 
-    from torch import randperm
     from torch.optim.lr_scheduler import _LRScheduler
     from torch.utils.data import DataLoader
 
@@ -173,7 +172,8 @@ class TransformerBasedEmbeddingMixin(EmbeddingMixin):
 
         with build_pbar_context(pbar, tqdm_kwargs={'total': list_length(data_set)}) as pbar:
             for batch in train_iter:
-                batch_len, logits = self._create_embeddings(tensors,batch,
+                batch_len, logits = self._create_embeddings(tensors,
+                                                            batch,
                                                             embedding_method=embedding_method,
                                                             hidden_layer_index=hidden_layer_index)
                 pbar.update(batch_len)
@@ -213,13 +213,11 @@ class TransformerBasedEmbeddingMixin(EmbeddingMixin):
 
 class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClassifier):
 
-    # TODO: remove scheduler and optimizer
     def __init__(self, transformer_model, num_classes, multi_label=False, num_epochs=10, lr=2e-5,
-                 mini_batch_size=12, criterion=None, optimizer=None, scheduler='linear',
-                 validation_set_size=0.1, validations_per_epoch=1, no_validation_set_action='sample',
-                 initial_model_selection=None, early_stopping_no_improvement=5,
-                 early_stopping_acc=-1, model_selection=True, fine_tuning_arguments=None,
-                 device=None, memory_fix=1, class_weight=None,
+                 mini_batch_size=12, validation_set_size=0.1, validations_per_epoch=1,
+                 no_validation_set_action='sample', initial_model_selection=None,
+                 early_stopping_no_improvement=5, early_stopping_acc=-1, model_selection=True,
+                 fine_tuning_arguments=None, device=None, memory_fix=1, class_weight=None,
                  verbosity=VERBOSITY_MORE_VERBOSE, cache_dir='.active_learning_lib_cache/'):
         """
         Parameters
@@ -268,10 +266,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         """
         super().__init__(device=device)
 
-        if criterion is not None and class_weight is not None:
-            warnings.warn('Class weighting will have no effect with a non-default criterion',
-                          RuntimeWarning)
-
         with verbosity_logger():
             self.logger = logging.getLogger(__name__)
             self.logger.verbosity = verbosity
@@ -282,9 +276,10 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         self.num_epochs = num_epochs
         self.lr = lr
         self.mini_batch_size = mini_batch_size
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.scheduler = scheduler
+
+        self.criterion = None
+        self.optimizer = None
+        self.scheduler = 'linear'
 
         self.validation_set_size = validation_set_size
         self.validations_per_epoch = validations_per_epoch
@@ -312,7 +307,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
         self.enc_ = None
 
-    def fit(self, train_set, validation_set=None, optimizer=None, scheduler=None):
+    def fit(self, train_set, validation_set=None, criterion=None, optimizer=None, scheduler=None):
         """
         Trains the model using the given train set.
 
@@ -324,6 +319,9 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             A validation set used for validation during training, or `None`. If `None`, the fit
             operation will split apart a subset of the trainset as a validation set, whose size
             is set by `self.validation_set_size`.
+        optimizer :
+
+        scheduler :
 
         Returns
         -------
@@ -331,6 +329,10 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             Returns the current classifier with a fitted model.
         """
         check_training_data(train_set, validation_set)
+
+        if criterion is not None and self.class_weight is not None:
+            warnings.warn('Class weighting will have no effect with a non-default criterion',
+                          RuntimeWarning)
 
         sub_train, sub_valid = get_splits(train_set, validation_set, multi_label=self.multi_label,
                                           validation_set_size=self.validation_set_size)
@@ -349,7 +351,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
     def _fit_main(self, sub_train, sub_valid, optimizer, scheduler):
         if self.model is None:
-            # TODO: port this block to KimCNNClassifier (except for initialize_transformer)
             encountered_num_classes = get_num_labels(sub_train.y)
 
             if self.num_classes is None:
@@ -365,6 +366,9 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         if self.criterion is None:
             self.criterion = self.get_default_criterion()
 
+        if self.optimizer is None:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+
         if self.fine_tuning_arguments is not None:
             params = _get_layer_params(self.model, self.lr, self.fine_tuning_arguments)
         else:
@@ -373,7 +377,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         if optimizer is None or scheduler is None:
             if optimizer is not None:
                 self.logger.warning('Overridering optimizer since optimizer in kwargs needs to be '
-                               'passed in combination with scheduler')
+                                    'passed in combination with scheduler')
             if scheduler is not None:
                 self.logger.warning('Overridering scheduler since optimizer in kwargs needs to be '
                                     'passed in combination with scheduler')
@@ -481,7 +485,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
                          for metric in metrics})
             model_selection_manager.add_model(self.model, 0, **fill)
 
-
             optimizer_mod, scheduler_mod = self._initialize_optimizer_and_scheduler(None,
                                                                                     'linear',
                                                                                     self.fine_tuning_arguments,
@@ -492,7 +495,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
             self._train_loop(sub_train, sub_valid, optimizer_mod, scheduler_mod, 0, num_epochs, model_selection_manager)
             model_selection_managers.append(model_selection_manager)
-
+ 
         # relativ to metric list above
         target_metric = 0
 
