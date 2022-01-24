@@ -85,7 +85,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
     y : numpy.ndarray
         Labels for the the current labeled pool. Each tuple `(x_indices_labeled[i], y[i])`
         represents one labeled sample.
-    queried_indices : numpy.ndarray or None
+    x_indices_queried : numpy.ndarray or None
         Queried indices returned by the last `query()` call, or `None` if no query has been
         executed yet.
     """
@@ -103,7 +103,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         self.x_indices_ignored = np.empty(shape=(0), dtype=int)
 
         self.y = np.empty(shape=(0), dtype=int)
-        self.queried_indices = None
+        self.x_indices_queried = None
 
     def initialize_data(self, x_indices_initial, y_initial, x_indices_ignored=None, x_indices_validation=None,
                         retrain=True):
@@ -155,8 +155,8 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
 
         Returns
         -------
-        queried_indices : numpy.ndarray
-            List of queried indices (relative to the current unlabeled pool).
+        x_indices_queried : numpy.ndarray
+            An array of queried indices (relative to the current unlabeled pool).
 
         Raises
         ------
@@ -173,20 +173,20 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             raise ValueError('Number of rows of alternative representation x must match the train '
                              'set (dim 0).')
 
-        self.mask = np.ones(size, bool)
-        self.mask[np.concatenate([self.x_indices_labeled, self.x_indices_ignored])] = False
+        mask = np.ones(size, bool)
+        mask[np.concatenate([self.x_indices_labeled, self.x_indices_ignored])] = False
         indices = np.arange(size)
 
         x = self.x_train if x is None else x
         query_strategy_kwargs = dict() if query_strategy_kwargs is None else query_strategy_kwargs
-        self.queried_indices = self.query_strategy.query(self._clf,
-                                                         x,
-                                                         indices[self.mask],
-                                                         self.x_indices_labeled,
-                                                         self.y,
-                                                         n=num_samples,
-                                                         **query_strategy_kwargs)
-        return self.queried_indices
+        self.x_indices_queried = self.query_strategy.query(self._clf,
+                                                           x,
+                                                           indices[mask],
+                                                           self.x_indices_labeled,
+                                                           self.y,
+                                                           n=num_samples,
+                                                           **query_strategy_kwargs)
+        return self.x_indices_queried
 
     def update(self, y, x_indices_validation=None):
         """
@@ -204,18 +204,18 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             if provided. Otherwise each classifier that uses a validation set will be responsible
             for creating a validation set.
         """
-        if len(self.queried_indices) != len(y):
+        if len(self.x_indices_queried) != len(y):
             raise ValueError('Query-update mismatch: indices queried - {} / labels provided - {}'
-                             .format(len(self.queried_indices), len(y)
+                             .format(len(self.x_indices_queried), len(y)
                                      ))
 
         y = np.array(y)
         ignored = y == np.array([None])
         if ignored.any():
             y = np.delete(y, np.arange(y.shape[0])[ignored])
-            self.x_indices_ignored = np.concatenate([self.x_indices_ignored, self.queried_indices[ignored]])
+            self.x_indices_ignored = np.concatenate([self.x_indices_ignored, self.x_indices_queried[ignored]])
 
-        self.x_indices_labeled = np.concatenate([self.x_indices_labeled, self.queried_indices[~ignored]])
+        self.x_indices_labeled = np.concatenate([self.x_indices_labeled, self.x_indices_queried[~ignored]])
         self._label_to_position = self._build_label_to_position_index()
 
         if self.x_indices_labeled.shape[0] != np.unique(self.x_indices_labeled).shape[0]:
@@ -225,9 +225,6 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         self.y = np.concatenate([self.y, y])
         if not ignored.all():
             self._retrain(x_indices_validation=x_indices_validation)
-
-        self.queried_indices = None
-        self.mask = None
 
     def update_label_at(self, x_index, y, retrain=False, x_indices_validation=None):
         """

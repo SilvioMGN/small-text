@@ -58,6 +58,7 @@ class PoolBasedActiveLearnerTest(unittest.TestCase):
         self.assertEqual(None, active_learner.classifier)
         self.assertEqual(query_strategy, active_learner.query_strategy)
         self.assertFalse(active_learner.incremental_training)
+        self.assertIsNone(active_learner.x_indices_queried)
 
     def test_initialize_data(self):
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
@@ -97,6 +98,7 @@ class PoolBasedActiveLearnerTest(unittest.TestCase):
                                        x_indices_validation=x_indices_validation)
 
         self.assertIsNotNone(active_learner._label_to_position)
+        self.assertIsNone(active_learner.x_indices_queried)
         assert_array_equal(y_initial, active_learner.y)
         assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
         if x_indices_ignored is not None:
@@ -126,10 +128,12 @@ class PoolBasedActiveLearnerTest(unittest.TestCase):
     def test_query(self, num_samples=5):
 
         clf_factory = self._get_classifier_factory()
-        query_strategy_mock = Mock()
+        # TODO: change other methods here from mock to spy as well and check x_indices_queried
+        #       (after merge)
+        query_strategy_spy = Mock(wraps=RandomSampling())
         x = SklearnDataset(*random_matrix_data('dense', self.dataset_num_samples))
 
-        active_learner = PoolBasedActiveLearner(clf_factory, query_strategy_mock, x)
+        active_learner = PoolBasedActiveLearner(clf_factory, query_strategy_spy, x)
 
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
         y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
@@ -137,8 +141,11 @@ class PoolBasedActiveLearnerTest(unittest.TestCase):
 
         active_learner.query(num_samples=num_samples)
 
-        query_strategy_mock.query.assert_called_with(ANY, x, ANY, x_indices_initial, y_initial,
+        query_strategy_spy.query.assert_called_with(ANY, x, ANY, x_indices_initial, y_initial,
                                                      n=num_samples)
+
+        self.assertIsNotNone(active_learner.x_indices_queried)
+        self.assertEqual((num_samples,), active_learner.x_indices_queried.shape)
 
     def test_query_with_custom_representation(self, num_samples=5):
 
@@ -352,7 +359,7 @@ class PoolBasedActiveLearnerTest(unittest.TestCase):
             y_new = np.random.randint(0, 1, size=5)
 
             active_learner.query(num_samples=5)
-            active_learner.queried_indices = x_indices_initial
+            active_learner.x_indices_queried = x_indices_initial
             active_learner.update(y_new)
 
         active_learner._retrain.assert_called_once()
