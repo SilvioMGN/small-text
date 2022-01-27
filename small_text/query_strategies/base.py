@@ -22,32 +22,33 @@ class ClassificationType(Enum):
                              f'{classification_type_str}')
 
 
-def constraints(query_func=None, classification_type=None):
-    if not callable(query_func):
+def constraints(cls=None, classification_type=None):
+    """
+
+    """
+    if not callable(cls):
         return partial(constraints, classification_type=classification_type)
 
-    @wraps(query_func)
-    def wrap_query_func(*args, **kwargs):
-        if len(args) != NUM_QUERY_ARGS:
-            raise TypeError(f'{query_func.__name__} is expected to be a function which takes '
-                            f'{NUM_QUERY_ARGS} positional arguments but {len(args)} were given')
+    @wraps(cls, updated=())
+    class QueryStrategyConstraints(cls):
 
-        y = args[5]
+        def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, *args, n=10, **kwargs):
 
-        if classification_type is not None:
-            if isinstance(classification_type, str):
-                classification_type_ = ClassificationType.from_str(classification_type)
+            if classification_type is not None:
+                if isinstance(classification_type, str):
+                    classification_type_ = ClassificationType.from_str(classification_type)
 
-            if classification_type_ == ClassificationType.SINGLE_LABEL and isinstance(y, csr_matrix):
-                raise RuntimeError(f'Invalid configuration: This query strategy requires '
-                                   f'classification_type={str(classification_type_.value)} '
-                                   f'but multi-label data was encountered')
-            elif classification_type_ == ClassificationType.MULTI_LABEL \
-                    and not isinstance(y, csr_matrix):
-                raise RuntimeError(f'Invalid configuration: This query strategy requires '
-                                   f'classification_type={str(classification_type_.value)} '
-                                   f'but single-label data was encountered')
+                if classification_type_ == ClassificationType.SINGLE_LABEL and isinstance(y, csr_matrix):
+                    raise RuntimeError(f'Invalid configuration: This query strategy requires '
+                                       f'classification_type={str(classification_type_.value)} '
+                                       f'but multi-label data was encountered')
+                elif classification_type_ == ClassificationType.MULTI_LABEL \
+                        and not isinstance(y, csr_matrix):
+                    raise RuntimeError(f'Invalid configuration: This query strategy requires '
+                                       f'classification_type={str(classification_type_.value)} '
+                                       f'but single-label data was encountered')
 
-        return query_func(*args, **kwargs)
+            return super().query(clf, x, x_indices_unlabeled, x_indices_labeled, y,
+                                 *args, n=n, **kwargs)
 
-    return wrap_query_func
+    return QueryStrategyConstraints

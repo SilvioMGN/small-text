@@ -59,7 +59,7 @@ class QueryStrategiesTest(unittest.TestCase):
             self._simple_exhaustive_active_learning_test(query_strategy)
 
     def _simple_exhaustive_active_learning_test(self, query_strategy, query_size=10,
-                                                num_classes=6, num_initial=10):
+                                                num_classes=6, num_initial=30):
         dataset = random_text_classification_dataset(num_samples=200, max_length=10, num_classes=num_classes)
 
         self.assertFalse(dataset[0].x[PytorchTextClassificationDataset.INDEX_TEXT].is_cuda)
@@ -68,7 +68,8 @@ class QueryStrategiesTest(unittest.TestCase):
                                     {'embedding_matrix': torch.rand(len(dataset.vocab), 20),
                                      'num_epochs': 2})
 
-        active_learner = get_initialized_active_learner(clf_factory, query_strategy, dataset)
+        active_learner = get_initialized_active_learner(clf_factory, query_strategy, dataset,
+                                                        initial_indices=num_initial)
 
         for _ in range(3):
             active_learner.query()

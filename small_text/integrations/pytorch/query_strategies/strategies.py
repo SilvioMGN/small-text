@@ -20,6 +20,7 @@ except ImportError as e:
     raise PytorchNotFoundError('Could not import pytorch')
 
 
+@constraints(classification_type='single-label')
 class ExpectedGradientLength(QueryStrategy):
     """Selects instances by expected gradient length [Set07]_.
 
@@ -38,7 +39,6 @@ class ExpectedGradientLength(QueryStrategy):
 
         self.scores_ = None
 
-    @constraints(classification_type='single-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10, pbar=None):
         self._validate_query_input(x_indices_unlabeled, n)
 
@@ -131,6 +131,7 @@ class ExpectedGradientLength(QueryStrategy):
         return 'ExpectedGradientLength()'
 
 
+@constraints(classification_type='single-label')
 class ExpectedGradientLengthMaxWord(ExpectedGradientLength):
     """Selects instances using the EGL-word model [ZLW17]_.
 
@@ -178,7 +179,6 @@ class ExpectedGradientLengthMaxWord(ExpectedGradientLength):
         # tensor that contains the unique word is for each item in the batch
         self._words = None
 
-    @constraints(classification_type='single-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10, pbar=None):
 
         assert_layer_exists(clf.model, self.layer_name)
@@ -236,6 +236,7 @@ class ExpectedGradientLengthMaxWord(ExpectedGradientLength):
         return 'ExpectedGradientLengthMaxWord()'
 
 
+@constraints(classification_type='single-label')
 class ExpectedGradientLengthLayer(ExpectedGradientLength):
 
     def __init__(self, num_classes, layer_name, batch_size=50):
@@ -259,6 +260,7 @@ class ExpectedGradientLengthLayer(ExpectedGradientLength):
         return 'ExpectedGradientLengthLayer()'
 
 
+@constraints(classification_type='single-label')
 class BADGE(EmbeddingBasedQueryStrategy):
     """
     Implements "Batch Active learning by Diverse Gradient Embedding" (BADGE) _[AZK20].

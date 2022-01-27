@@ -10,7 +10,6 @@ from small_text.utils.logging import VERBOSITY_MORE_VERBOSE
 
 try:
     from torch.optim.lr_scheduler import LambdaLR
-    from torch.nn.modules import BCEWithLogitsLoss
 
     from small_text.integrations.transformers.classifiers.classification import \
         FineTuningArguments, TransformerModelArguments, TransformerBasedClassification

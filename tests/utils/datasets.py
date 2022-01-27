@@ -5,6 +5,7 @@ from scipy import sparse
 from sklearn.datasets import fetch_20newsgroups
 
 from small_text.data.datasets import SklearnDataset
+from small_text.data.sampling import _get_class_histogram
 
 try:
     import torch
@@ -110,6 +111,9 @@ def random_text_classification_dataset(num_samples=10, max_length=60, num_classe
 
     if target_labels not in ['explicit', 'inferred']:
         raise ValueError(f'Invalid test parameter value for target_labels: {str(target_labels)}')
+    if num_classes > num_samples:
+        raise ValueError('When num_classes is greater than num_samples the occurrence of each '
+                         'class cannot be guaranteed')
 
     vocab = Vocab(Counter([f'word_{i}' for i in range(vocab_size)]))
 
@@ -123,9 +127,36 @@ def random_text_classification_dataset(num_samples=10, max_length=60, num_classe
              random_labels(num_classes, multi_label))
             for _ in range(num_samples)]
 
+    data = assure_all_labels_occur(data, num_classes, multi_label=multi_label)
+
     target_labels = None if target_labels == 'inferred' else np.arange(num_classes)
     return PytorchTextClassificationDataset(data, vocab, is_multi_label=multi_label,
                                             target_labels=target_labels)
+
+
+def assure_all_labels_occur(data, num_classes, multi_label=False):
+    """Enforces that all labels occur in the data."""
+    label_list = [labels for *_, labels in data
+                  if isinstance(labels, int) or len(labels) > 0]
+    if len(label_list) == 0:
+        return data
+
+    if not np.all([isinstance(element, int) for element in label_list]):
+        all_labels = np.concatenate(label_list, dtype=int)
+        all_labels = all_labels.flatten()
+    else:
+        all_labels = np.array(label_list)
+
+    hist = _get_class_histogram(all_labels, num_classes)
+    missing_labels = np.arange(hist.shape[0])[hist == 0]
+
+    for i, label_idx in enumerate(missing_labels):
+        if multi_label:
+            data[i] = data[i][:-1] + (np.sort(np.array(data[i][-1] + label_idx)),)
+        else:
+            data[i] = data[i][:-1] + (label_idx,)
+
+    return data
 
 
 def random_transformer_dataset(num_samples, max_length=60, num_classes=2, multi_label=False,
@@ -151,6 +182,8 @@ def random_transformer_dataset(num_samples, max_length=60, num_classes=2, multi_
             labels = random_labels(num_classes, multi_label)
 
         data.append((text, mask, labels))
+
+    data = assure_all_labels_occur(data, num_classes)
 
     target_labels = None if target_labels == 'inferred' else np.arange(num_classes)
     return TransformersDataset(data, is_multi_label=multi_label, target_labels=target_labels)

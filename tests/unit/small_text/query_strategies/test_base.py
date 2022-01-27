@@ -10,16 +10,15 @@ from small_text.query_strategies.strategies import RandomSampling
 from tests.utils.datasets import random_sklearn_dataset
 
 
+@constraints(classification_type='single-label')
 class FakeSingleLabelQueryStrategy(RandomSampling):
 
-    @constraints(classification_type='single-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10):
         return super().query(clf, x, x_indices_unlabeled, x_indices_labeled, y, n=n)
 
-
+@constraints(classification_type='multi-label')
 class FakeMultiLabelQueryStrategy(RandomSampling):
 
-    @constraints(classification_type='multi-label')
     def query(self, clf, x, x_indices_unlabeled, x_indices_labeled, y, n=10):
         return super().query(clf, x, x_indices_unlabeled, x_indices_labeled, y, n=n)
 

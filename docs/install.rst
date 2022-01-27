@@ -4,7 +4,7 @@
 Installation
 ============
 
-Small-text can be easily installed via:
+Small-text can be easily installed using pip:
 
 .. code-block:: console
 

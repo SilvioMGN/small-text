@@ -122,8 +122,10 @@ class PytorchTextClassificationDataset(PytorchDataset):
 
     def _infer_target_labels(self):
         if self.multi_label:
+            # TODO: test "and len(d[self.INDEX_LABEL]) > 0"
             inferred_target_labels = np.concatenate([d[self.INDEX_LABEL] for d in self._data
-                                                     if d[self.INDEX_LABEL] is not None])
+                                                     if d[self.INDEX_LABEL] is not None
+                                                     and len(d[self.INDEX_LABEL]) > 0])
             inferred_target_labels = np.unique(inferred_target_labels)
         else:
             inferred_target_labels = np.unique([d[self.INDEX_LABEL] for d in self._data])

@@ -35,7 +35,7 @@ def multilabel_stratified_subsets_sampling(y, n_samples=10):
     return stratified_sampling(y_labelsets, n_samples=n_samples)
 
 
-def stratified_sampling(y, n_samples=10):
+def stratified_sampling(y, n_samples=10, enforce_min_occurrence=True):
     """
     Performs a stratified random sampling.
 
@@ -43,6 +43,9 @@ def stratified_sampling(y, n_samples=10):
     ----------
     y : numpy.ndarray or scipy.sparse.csr_matrix
         List of labels.
+    n_samples : int
+        Number of indices to sample.
+    enforce_min_occurrence : bool
 
     Returns
     -------
@@ -64,6 +67,24 @@ def stratified_sampling(y, n_samples=10):
     counts = _get_class_histogram(y, num_classes)
     expected_samples_per_class = np.floor(counts * (float(n_samples) / counts.sum())).astype(int)
 
+    if enforce_min_occurrence and expected_samples_per_class.min() == 0:
+        if n_samples > num_classes and np.unique(y).shape[0] == num_classes:  # feasibility check
+            expected_samples_per_class += 1
+
+            num_excessive_samples = expected_samples_per_class.sum() - n_samples
+            class_indices = np.arange(counts.shape[0])[expected_samples_per_class > 1]
+            round_robin_index = 0
+            for i in range(num_excessive_samples):
+
+                while expected_samples_per_class[class_indices[round_robin_index]] <= 1:
+                    round_robin_index += 1
+                    round_robin_index %= class_indices.shape[0]
+
+                expected_samples_per_class[class_indices[round_robin_index]] -= 1
+
+                class_indices = np.arange(counts.shape[0])[expected_samples_per_class > 1]
+                assert expected_samples_per_class[class_indices].sum() > 0
+
     return _random_sampling(n_samples, num_classes, expected_samples_per_class, counts, y)
 
 
@@ -71,7 +92,7 @@ def balanced_sampling(y, n_samples=10):
     """
     Performs a class-balanced random sampling.
 
-    If `n_samples` is not divisble by the number of classes, a number of samples equal to the
+    If `n_samples` is not divisible by the number of classes, a number of samples equal to the
     remainder will be sampled randomly among the classes.
 
     Parameters

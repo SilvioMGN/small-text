@@ -140,10 +140,7 @@ class EmbeddingTest(unittest.TestCase):
         self.assertEqual(len(train_set), predictions.shape[0])
 
 
-@pytest.mark.pytorch
-@parameterized_class([{'multi_label': True},
-                      {'multi_label': False}])
-class TransformerBasedClassificationTest(unittest.TestCase):
+class _TransformerBasedClassificationTest(object):
 
     def _get_dataset(self, num_samples=100, num_classes=4):
         return random_transformer_dataset(num_samples, max_length=60, num_classes=num_classes,
@@ -328,3 +325,19 @@ class TransformerBasedClassificationTest(unittest.TestCase):
                 str(w_.message) == expected_warning and w_.category == RuntimeWarning
                 for w_ in w])
             self.assertTrue(found_warning)
+
+
+@pytest.mark.pytorch
+class TransformerBasedClassificationSingleLabelTest(unittest.TestCase,
+                                                    _TransformerBasedClassificationTest):
+
+    def setUp(self):
+        self.multi_label = False
+
+
+@pytest.mark.pytorch
+class TransformerBasedClassificationMultiLabelTest(unittest.TestCase,
+                                                   _TransformerBasedClassificationTest):
+
+    def setUp(self):
+        self.multi_label = True

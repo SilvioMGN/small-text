@@ -42,8 +42,8 @@ class StratifiedSamplingTest(unittest.TestCase):
         indices = stratified_sampling(y, n_samples=30)
         counts = np.bincount(np.array([y[i] for i in indices]))
         self.assertEqual(30, len(indices))
-        self.assertEqual(4, len(counts))
-        self.assertEqual(4, len(counts[counts >= 7]))
+        self.assertEqual(4, counts.shape[0])
+        self.assertEqual(4, counts[counts >= 7].shape[0])
 
     def test_stratified_sampling_with_gaps(self):
         y = np.array([0] * 25 + [2] * 25 + [3] * 50)

@@ -47,6 +47,7 @@ def transformers_collate_fn(batch, enc=None):
         masks = torch.cat([entry[TransformersDataset.INDEX_MASK] for entry in batch], dim=0)
         if enc is not None:
             labels = [entry[TransformersDataset.INDEX_LABEL] for entry in batch]
+            # enc.transform raises "TypeError: iteration over a 0-d array" for "enc.transform([np.array(0)])"
             multi_hot = enc.transform(labels)
             label = torch.tensor(multi_hot, dtype=float)
         else:
@@ -100,7 +101,7 @@ def _get_layer_params(model, base_lr, fine_tuning_arguments):
 
     layerwise_gradient_decay = fine_tuning_arguments.layerwise_gradient_decay
 
-    params = []
+    params = [] 
 
     base_model = getattr(model, model.base_model_prefix)
     if hasattr(base_model, 'encoder'):
