@@ -13,12 +13,12 @@ try:
 
     from small_text.integrations.pytorch.datasets import PytorchTextClassificationDataset
     from small_text.integrations.transformers.datasets import TransformersDataset
-except ImportError as e:
+except ImportError:
     pass
 
 try:
     from transformers import AutoTokenizer
-except ImportError as e:
+except ImportError:
     pass
 
 

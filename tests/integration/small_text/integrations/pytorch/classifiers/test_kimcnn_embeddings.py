@@ -61,7 +61,7 @@ class KimCNNEmbeddingTest(unittest.TestCase):
             if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
                 gradient_length = classifier.model.out_channels * classifier.model.num_kernels \
                                   * classifier.model.num_classes
-                self.assertEqual(classifier.num_class * gradient_length,
+                self.assertEqual(classifier.num_classes * gradient_length,
                                  embeddings.shape[1])
             else:
                 self.assertEqual(classifier.model.out_channels * classifier.model.num_kernels,
@@ -95,7 +95,7 @@ class KimCNNEmbeddingTest(unittest.TestCase):
             if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
                 gradient_length = classifier.model.out_channels * classifier.model.num_kernels \
                                   * classifier.model.num_classes
-                self.assertEqual(classifier.num_class * gradient_length,
+                self.assertEqual(classifier.num_classes * gradient_length,
                                  embeddings.shape[1])
             else:
                 self.assertEqual(classifier.model.out_channels * classifier.model.num_kernels,

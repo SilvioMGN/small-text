@@ -57,7 +57,7 @@ def stratified_sampling(y, n_samples=10, enforce_min_occurrence=True):
     Only useful for experimental simulations (Requires label knowledge).
     """
     # TODO: prevent other types? warn?
-    #if not isinstance(y, np.ndarray):
+    # if not isinstance(y, np.ndarray):
     #    y = np.array(y)
     _assert_sample_size(y, n_samples)
 

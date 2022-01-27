@@ -15,6 +15,7 @@ try:
     from transformers import get_linear_schedule_with_warmup
 
     from small_text.integrations.pytorch.utils.data import get_class_weights
+    from small_text.utils.classification import empty_result, get_splits, prediction_result
 except ImportError:
     raise PytorchNotFoundError('Could not import pytorch')
 
@@ -44,24 +45,34 @@ class PytorchClassifier(Classifier):
     def fit(self, train_set, validation_set=None, **kwargs):
         pass
 
-    @abstractmethod
-    def predict(self, test_set, return_proba=False):
+    def predict(self, data_set, return_proba=False):
         """
         Parameters
         ----------
-        test_set : small_text.integrations.pytorch.PytorchTextClassificationDataset
-            Test set.
+        data_set : small_text.data.Dataset
+            A dataset on whose instances predictions are made.
         return_proba : bool
             If True, additionally returns the confidence distribution over all classes.
 
         Returns
         -------
-        predictions : np.ndarray
-            List of predictions.
-        scores : np.ndarray (optional)
-            Distribution of confidence scores over all classes if `return_proba` is True.
+        predictions : np.ndarray[np.int32] or csr_matrix[np.int32]
+            List of predictions if the classifier was fitted on multi-label data,
+            otherwise a sparse matrix of predictions.
+        probas : np.ndarray[np.float32] (optional)
+            List of probabilities (or confidence estimates) if `return_proba` is True.
         """
-        pass
+        if len(data_set) == 0:
+            return empty_result(self.multi_label, self.num_classes, return_prediction=True,
+                                return_proba=return_proba)
+
+        proba = self.predict_proba(data_set)
+        predictions = prediction_result(proba, self.multi_label, self.num_classes, enc=self.enc_)
+
+        if return_proba:
+            return predictions, proba
+
+        return predictions
 
     @abstractmethod
     def predict_proba(self, test_set):
@@ -156,3 +167,4 @@ class PytorchClassifier(Classifier):
             acc = (logits.argmax(1) == cls).sum().item()
 
         return acc
+

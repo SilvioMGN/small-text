@@ -29,7 +29,7 @@ def get_ignored_labels_mask(y, ignored_label_value):
 
 def concatenate(a, b):
     if isinstance(a, csr_matrix) and isinstance(b, csr_matrix):
-       return vstack([a, b])
+        return vstack([a, b])
     else:
         return np.concatenate([a, b])
 

@@ -161,17 +161,6 @@ class _TransformerBasedClassificationTest(object):
         fake_train.assert_called()
         select_best_model_mock.assert_called()
 
-    def test_fit_with_non_default_criterion_and_class_weighting(self):
-
-        model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
-        classifier = TransformerBasedClassification(model_args, 2, class_weight='balanced')
-
-        train_set = random_transformer_dataset(8)
-        criterion = BCEWithLogitsLoss()
-
-        with self.assertWarnsRegex(RuntimeWarning, 'Class weighting will have no effect'):
-            classifier.fit(train_set, criterion=criterion)
-
     def test_fit_with_class_weight(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,

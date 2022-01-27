@@ -84,7 +84,7 @@ class PytorchTextClassificationDatasetTest(unittest.TestCase):
         ds_new = self._random_data(num_samples=self.NUM_SAMPLES)
 
         if self.is_multi_label:
-           assert_csr_matrix_not_equal(ds.y, ds_new.y)
+            assert_csr_matrix_not_equal(ds.y, ds_new.y)
         else:
             assert_csr_matrix_not_equal(ds.y, ds_new.y)
             self.assertTrue(isinstance(ds.y, np.ndarray))

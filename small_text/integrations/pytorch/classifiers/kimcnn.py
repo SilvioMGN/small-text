@@ -1,7 +1,6 @@
 import datetime
 import logging
 import tempfile
-import warnings
 
 import numpy as np
 
@@ -171,11 +170,12 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         # Training parameters
         self.num_classes = num_classes
         self.num_epochs = num_epochs
-        self.mini_batch_size = mini_batch_size
+        self.lr = lr
+
         self.criterion = None
         self.optimizer = None
         self.scheduler = 'linear'
-        self.lr = lr
+
         self.class_weight = class_weight
 
         # KimCNN (pytorch model) parameters
@@ -194,7 +194,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         self.model_selection = None
         self.enc_ = None
 
-    def fit(self, train_set, validation_set=None, criterion=None, optimizer=None, scheduler=None):
+    def fit(self, train_set, validation_set=None, optimizer=None, scheduler=None):
         """
         Trains the model using the given train set.
 
@@ -218,10 +218,6 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         """
         check_training_data(train_set, validation_set)
 
-        if criterion is not None and self.class_weight is not None:
-            warnings.warn('Class weighting will have no effect with a non-default criterion',
-                          RuntimeWarning)
-
         sub_train, sub_valid = get_splits(train_set, validation_set, multi_label=self.multi_label,
                                           validation_set_size=self.validation_set_size)
 
@@ -234,6 +230,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
             self.enc_ = self.enc_.fit(labels)
 
         self.class_weights_ = self.initialize_class_weights(sub_train)
+        self.criterion = self.get_default_criterion()
 
         return self._fit_main(sub_train, sub_valid, fit_optimizer, fit_scheduler)
 
@@ -250,9 +247,6 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
                                                                         encountered_num_classes))
 
             self.initialize_kimcnn_model(sub_train)
-
-        if self.criterion is None:
-            self.criterion = self.get_default_criterion()
 
         optimizer, scheduler = self._get_optimizer_and_scheduler(optimizer,
                                                                  scheduler,
@@ -342,7 +336,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         train_iter = dataloader(sub_train_.data, self.mini_batch_size, self._create_collate_fn())
 
         for i, (text, cls) in enumerate(train_iter):
-            loss, acc = self._train_single_batch(text, cls, optimizer, self.criterion)
+            loss, acc = self._train_single_batch(text, cls, optimizer)
             scheduler.step()
 
             train_loss += loss
@@ -350,7 +344,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
 
         return train_loss / len(sub_train_), train_acc / len(sub_train_)
 
-    def _train_single_batch(self, text, cls, optimizer, criterion):
+    def _train_single_batch(self, text, cls, optimizer):
 
         train_loss = 0.
         train_acc = 0.
@@ -365,8 +359,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
                 target = F.one_hot(cls, 2).float()
             else:
                 target = cls
-
-        loss = criterion(output, target)
+        loss = self.criterion(output, target)
 
         loss.backward()
 
@@ -432,29 +425,19 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         Parameters
         ----------
         data_set : PytorchTextClassificationDataset
-            A dataset whose labels will be predicted.
+            A dataset on whose instances predictions are made.
         return_proba : bool
-            If `True`, also returns a probability-like class distribution.
+            If True, additionally returns the confidence distribution over all classes.
 
         Returns
         -------
         predictions : np.ndarray[np.int32] or csr_matrix[np.int32]
-            List of predictions if the classifier was fitted on multi-label data,
+            List of predictions if the classifier was fitted on single-label data,
             otherwise a sparse matrix of predictions.
         probas : np.ndarray[np.float32] (optional)
             List of probabilities (or confidence estimates) if `return_proba` is True.
         """
-        if len(data_set) == 0:
-            return empty_result(self.multi_label, self.num_classes, return_prediction=True,
-                                return_proba=return_proba)
-
-        proba = self.predict_proba(data_set)
-        predictions = prediction_result(proba, self.multi_label, self.num_classes, enc=self.enc_)
-
-        if return_proba:
-            return predictions, proba
-
-        return predictions
+        return super().predict(data_set, return_proba=return_proba)
 
     def predict_proba(self, test_set):
         if len(test_set) == 0:

@@ -9,8 +9,6 @@ from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
 from small_text.utils.logging import VERBOSITY_MORE_VERBOSE
 
 try:
-    from torch.optim.lr_scheduler import LambdaLR
-
     from small_text.integrations.transformers.classifiers.classification import \
         FineTuningArguments, TransformerModelArguments, TransformerBasedClassification
     from small_text.integrations.pytorch.datasets import PytorchDatasetView

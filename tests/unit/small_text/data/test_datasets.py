@@ -375,7 +375,7 @@ class SplitDataTest(unittest.TestCase):
 
     @mock.patch('small_text.data.datasets.stratified_sampling',
                 wraps=stratified_sampling)
-    def test_split_data_balanced(self, stratified_sampling_mock):
+    def test_split_data_stratified(self, stratified_sampling_mock):
         train_set = np.random.rand(100, 2)
         y = np.array([0] * 10 + [1] * 90)
 

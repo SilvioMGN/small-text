@@ -1,6 +1,5 @@
 import datetime
 import logging
-import os
 import tempfile
 import warnings
 
@@ -26,7 +25,6 @@ try:
     import torch
     import torch.nn.functional as F
 
-    from torch.utils.data import DataLoader
     from transformers import AdamW
     from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 
@@ -230,11 +228,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             Learning rate.
         mini_batch_size : int
             Size of mini batches during training.
-        criterion :
-
-        optimizer :
-
-        scheduler :
 
         validation_set_size : float
             The sizes of the validation as a fraction of the training set if no validation set
@@ -300,7 +293,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
         self.enc_ = None
 
-    def fit(self, train_set, validation_set=None, criterion=None, optimizer=None, scheduler=None):
+    def fit(self, train_set, validation_set=None, optimizer=None, scheduler=None):
         """
         Trains the model using the given train set.
 
@@ -323,10 +316,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         """
         check_training_data(train_set, validation_set)
 
-        if criterion is not None and self.class_weight is not None:
-            warnings.warn('Class weighting will have no effect with a non-default criterion',
-                          RuntimeWarning)
-
         sub_train, sub_valid = get_splits(train_set, validation_set, multi_label=self.multi_label,
                                           validation_set_size=self.validation_set_size)
 
@@ -339,6 +328,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             self.enc_ = self.enc_.fit(labels)
 
         self.class_weights_ = self.initialize_class_weights(sub_train)
+        self.criterion = self.get_default_criterion()
 
         return self._fit_main(sub_train, sub_valid, fit_optimizer, fit_scheduler)
 
@@ -355,9 +345,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
                                                                         encountered_num_classes))
 
             self.initialize_transformer(self.cache_dir)
-
-        if self.criterion is None:
-            self.criterion = self.get_default_criterion()
 
         if self.fine_tuning_arguments is not None:
             params = _get_layer_params(self.model, self.lr, self.fine_tuning_arguments)
@@ -491,8 +478,8 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
         train_iter = dataloader(sub_train_.data, self.mini_batch_size, self._create_collate_fn())
 
-        for i, (text, masks, cls) in enumerate(train_iter):
-            loss, acc = self._train_single_batch(text, masks, cls, optimizer)
+        for i, (x, masks, cls) in enumerate(train_iter):
+            loss, acc = self._train_single_batch(x, masks, cls, optimizer)
             scheduler.step()
 
             train_loss += loss
@@ -512,24 +499,17 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
     def _create_collate_fn(self):
         return partial(transformers_collate_fn, enc=self.enc_)
 
-    def _train_single_batch(self, text, masks, cls, optimizer):
+    def _train_single_batch(self, x, masks, cls, optimizer):
 
         train_loss = 0.
         train_acc = 0.
 
         optimizer.zero_grad()
 
-        text, masks, cls = text.to(self.device), masks.to(self.device), cls.to(self.device)
-        outputs = self.model(text, attention_mask=masks)
+        x, masks, cls = x.to(self.device), masks.to(self.device), cls.to(self.device)
+        outputs = self.model(x, attention_mask=masks)
 
-        if self.num_classes == 2:
-            logits = outputs.logits
-            target = F.one_hot(cls, 2).float()
-        else:
-            logits = outputs.logits.view(-1, self.num_classes)
-            target = cls
-
-        loss = self.criterion(logits, target)
+        logits, loss = self._compute_loss(cls, outputs)
 
         loss.backward()
 
@@ -540,9 +520,20 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         train_loss += loss.detach().item()
         train_acc += self.sum_up_accuracy_(logits, cls)
 
-        del text, masks, cls, loss, outputs
+        del x, masks, cls, loss, outputs
 
         return train_loss, train_acc
+
+    def _compute_loss(self, cls, outputs):
+        if self.num_classes == 2:
+            logits = outputs.logits
+            target = F.one_hot(cls, 2).float()
+        else:
+            logits = outputs.logits.view(-1, self.num_classes)
+            target = cls
+        loss = self.criterion(logits, target)
+
+        return logits, loss
 
     def _perform_model_selection(self, sub_valid):
         if sub_valid is not None:
@@ -583,34 +574,33 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             x, masks, cls = x.to(self.device), masks.to(self.device), cls.to(self.device)
 
             with torch.no_grad():
-                outputs = self.model(x, attention_mask=masks, labels=cls)
+                outputs = self.model(x, attention_mask=masks)
+                _, loss = self._compute_loss(cls, outputs)
 
-                valid_loss += outputs.loss.item()
+                valid_loss += loss.item()
                 acc += self.sum_up_accuracy_(outputs.logits, cls)
                 del outputs, x, masks, cls
 
         return valid_loss / len(validation_set), acc / len(validation_set)
 
-    def predict(self, test_set, return_proba=False):
+    def predict(self, data_set, return_proba=False):
         """
         Parameters
         ----------
-        test_set : small_text.integrations.transformers.TransformerDataset
-            Test set.
+        data_set : small_text.integrations.transformers.TransformerDataset
+            A dataset on whose instances predictions are made.
         return_proba : bool
-            Indicates if a probability-like class distribution should be returned.
+            If True, additionally returns the confidence distribution over all classes.
+
+        Returns
+        -------
+        predictions : np.ndarray[np.int32] or csr_matrix[np.int32]
+            List of predictions if the classifier was fitted on single-label data,
+            otherwise a sparse matrix of predictions.
+        probas : np.ndarray[np.float32] (optional)
+            List of probabilities (or confidence estimates) if `return_proba` is True.
         """
-        if len(test_set) == 0:
-            return empty_result(self.multi_label, self.num_classes, return_prediction=True,
-                                return_proba=return_proba)
-
-        proba = self.predict_proba(test_set)
-        predictions = prediction_result(proba, self.multi_label, self.num_classes, enc=self.enc_)
-
-        if return_proba:
-            return predictions, proba
-
-        return predictions
+        return super().predict(data_set, return_proba=return_proba)
 
     def predict_proba(self, test_set):
         if len(test_set) == 0:
