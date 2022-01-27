@@ -71,7 +71,6 @@ class TestTransformerBasedClassification(unittest.TestCase):
         self.assertEqual(0.1, classifier.validation_set_size)
         self.assertEqual(1, classifier.validations_per_epoch)
         self.assertEqual('sample', classifier.no_validation_set_action)
-        self.assertIsNone(classifier.initial_model_selection)
         self.assertEqual(5, classifier.early_stopping_no_improvement)
         self.assertEqual(-1, classifier.early_stopping_acc)
         self.assertTrue(classifier.model_selection)
@@ -110,7 +109,6 @@ class TestTransformerBasedClassification(unittest.TestCase):
         self.assertEqual(validation_set_size, classifier.validation_set_size)
         self.assertEqual(validations_per_epoch, classifier.validations_per_epoch)
         self.assertEqual(no_validation_set_action, classifier.no_validation_set_action)
-        self.assertIsNone(classifier.initial_model_selection)
         # TODO: incomplete
 
     def test_fit_where_y_train_is_negative(self):

@@ -18,8 +18,6 @@ try:
     import torch
 
     from torch.nn.modules import BCEWithLogitsLoss
-    from torch.optim import Adadelta
-    from transformers import get_linear_schedule_with_warmup
 
     from small_text.integrations.transformers import TransformerModelArguments
     from small_text.integrations.transformers.classifiers import TransformerBasedClassificationFactory, TransformerBasedClassification
@@ -186,76 +184,6 @@ class _TransformerBasedClassificationTest(object):
         clf.fit(train_set)
         self.assertIsNotNone(clf.class_weights_)
         self.assertIsNotNone(clf.model)
-
-    def test_initialize_optimizer_and_scheduler_default(self):
-        sub_train = random_transformer_dataset(10)
-
-        model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
-        classifier = TransformerBasedClassification(model_args,
-                                                    3,
-                                                    multi_label=self.multi_label,
-                                                    class_weight='balanced')
-
-        base_lr = 2e-5
-        fine_tuning_arguments = FineTuningArguments(base_lr, 0.95)
-
-        optimizer = None
-        scheduler = 'linear'
-        params = None
-
-        # initializes the model
-        classifier.initialize_transformer(None)
-
-        optimizer, scheduler = classifier._initialize_optimizer_and_scheduler(optimizer,
-                                                                              scheduler,
-                                                                              fine_tuning_arguments,
-                                                                              base_lr,
-                                                                              params,
-                                                                              classifier.model,
-                                                                              sub_train)
-
-        self.assertIsNotNone(optimizer)
-        self.assertIsNotNone(scheduler)
-
-        optimizer_params = [param for param in classifier.model.parameters() if param.requires_grad]
-        self.assertEqual(optimizer.__class__,
-                         classifier._default_optimizer(optimizer_params, base_lr).__class__)
-
-    def test_initialize_optimizer_and_scheduler_custom(self):
-        sub_train = random_transformer_dataset(10)
-
-        model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
-        classifier = TransformerBasedClassification(model_args,
-                                                    3,
-                                                    multi_label=self.multi_label,
-                                                    class_weight='balanced')
-
-        base_lr = 2e-5
-        fine_tuning_arguments = FineTuningArguments(base_lr, 0.95)
-
-        # initializes the model
-        classifier.initialize_transformer(None)
-
-        optimizer_params = [param for param in classifier.model.parameters() if param.requires_grad]
-        optimizer_arg = Adadelta(optimizer_params)
-        scheduler_arg = get_linear_schedule_with_warmup(optimizer_arg,
-                                                        num_warmup_steps=10,
-                                                        num_training_steps=100)
-        params = None
-
-        optimizer, scheduler = classifier._initialize_optimizer_and_scheduler(optimizer_arg,
-                                                                              scheduler_arg,
-                                                                              fine_tuning_arguments,
-                                                                              base_lr,
-                                                                              params,
-                                                                              classifier.model,
-                                                                              sub_train)
-
-        self.assertIsNotNone(optimizer)
-        self.assertIsNotNone(scheduler)
-
-        self.assertEqual(optimizer, optimizer_arg)
-        self.assertEqual(scheduler, scheduler_arg)
 
     def test_predict_and_validate(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')

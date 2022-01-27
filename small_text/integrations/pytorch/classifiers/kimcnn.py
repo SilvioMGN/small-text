@@ -27,6 +27,7 @@ from small_text.utils.logging import verbosity_logger, VERBOSITY_MORE_VERBOSE
 try:
     import torch
     import torch.nn.functional as F  # noqa:N812
+    from torch.optim import Adadelta
 
     from small_text.integrations.pytorch.datasets import PytorchTextClassificationDataset
     from small_text.integrations.pytorch.model_selection import Metric, PytorchModelSelection
@@ -126,8 +127,8 @@ class KimCNNEmbeddingMixin(EmbeddingMixin):
         grad = module_selector(modules).weight.grad
         grad_size = grad.flatten().size(0)
 
-        arr = torch.empty(batch_len, grad_size * self.num_class)
-        for c in range(self.num_class):
+        arr = torch.empty(batch_len, grad_size * self.num_classes)
+        for c in range(self.num_classes):
             loss = self.criterion(sm, torch.LongTensor([c] * batch_len).to(self.device))
 
             for k in range(batch_len):
@@ -158,7 +159,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
                  early_stopping=5, early_stopping_acc=0.98, class_weight=None,
                  verbosity=VERBOSITY_MORE_VERBOSE):
 
-        super().__init__(multi_label=multi_label, device=device)
+        super().__init__(multi_label=multi_label, device=device, mini_batch_size=mini_batch_size)
 
         with verbosity_logger():
             self.logger = logging.getLogger(__name__)
@@ -253,12 +254,15 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         if self.criterion is None:
             self.criterion = self.get_default_criterion()
 
-        if self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer, scheduler = self._get_optimizer_and_scheduler(optimizer,
+                                                                 scheduler,
+                                                                 self.model.parameters(),
+                                                                 self.num_epochs,
+                                                                 sub_train)
 
         self.model = self.model.to(self.device)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            res = self._train(sub_train, sub_valid, tmp_dir)
+            res = self._train(sub_train, sub_valid, tmp_dir, optimizer, scheduler)
 
             model_path, _ = self.model_selection.select_best()
             self.model.load_state_dict(torch.load(model_path))
@@ -268,17 +272,18 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
     def initialize_kimcnn_model(self, sub_train):
         vocab_size = len(sub_train.vocab)
 
-        # TODO: there is self.num_class and self.num_classes
-        self.num_class = sub_train.target_labels.shape[0]
         embed_dim = self.embedding_matrix.shape[1]
-        self.model = KimCNN(vocab_size, self.max_seq_len, num_classes=self.num_class,
+        self.model = KimCNN(vocab_size, self.max_seq_len, num_classes=self.num_classes,
                             dropout=self.dropout, out_channels=self.out_channels,
                             embedding_matrix=self.embedding_matrix,
                             embed_dim=embed_dim,
                             freeze_embedding_layer=False, padding_idx=self.padding_idx,
                             kernel_heights=self.kernel_heights)
 
-    def _train(self, sub_train, sub_valid, tmp_dir):
+    def _default_optimizer(self, params, base_lr):
+        return Adadelta(params, lr=base_lr, eps=1e-8)
+
+    def _train(self, sub_train, sub_valid, tmp_dir, optimizer, scheduler):
 
         min_loss = float('inf')
         no_loss_reduction = 0
@@ -291,7 +296,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
             start_time = datetime.datetime.now()
 
             self.model.train()
-            train_loss, train_acc = self._train_func(sub_train)
+            train_loss, train_acc = self._train_func(sub_train, optimizer, scheduler)
 
             self.model.eval()
             valid_loss, valid_acc = self.validate(sub_valid)
@@ -329,7 +334,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         return partial(kimcnn_collate_fn, enc=self.enc_, padding_idx=self.padding_idx,
                        max_seq_len=self.max_seq_len)
 
-    def _train_func(self, sub_train_):
+    def _train_func(self, sub_train_, optimizer, scheduler):
 
         train_loss = 0.
         train_acc = 0.
@@ -337,7 +342,9 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         train_iter = dataloader(sub_train_.data, self.mini_batch_size, self._create_collate_fn())
 
         for i, (text, cls) in enumerate(train_iter):
-            loss, acc = self._train_single_batch(text, cls, self.optimizer, self.criterion)
+            loss, acc = self._train_single_batch(text, cls, optimizer, self.criterion)
+            scheduler.step()
+
             train_loss += loss
             train_acc += acc
 
@@ -472,6 +479,7 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
 
     def __del__(self):
         try:
-            del self.criterion, self.optimizer, self.scheduler, self.model
-        except:
+            for o in [self.criterion, self.optimizer, self.scheduler, self.model]:
+                del o
+        except Exception:
             pass

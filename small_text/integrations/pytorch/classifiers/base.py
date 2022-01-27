@@ -11,6 +11,9 @@ try:
     import torch.nn.functional as F
 
     from torch.nn.modules import CrossEntropyLoss, BCEWithLogitsLoss, BCELoss
+    from torch.optim.lr_scheduler import _LRScheduler, LambdaLR
+    from transformers import get_linear_schedule_with_warmup
+
     from small_text.integrations.pytorch.utils.data import get_class_weights
 except ImportError:
     raise PytorchNotFoundError('Could not import pytorch')
@@ -21,9 +24,10 @@ logger = logging.getLogger(__name__)
 
 class PytorchClassifier(Classifier):
 
-    def __init__(self, multi_label=False, device=None):
+    def __init__(self, multi_label=False, device=None, mini_batch_size=32):
 
         self.multi_label = multi_label
+        self.mini_batch_size = mini_batch_size
 
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -80,6 +84,50 @@ class PytorchClassifier(Classifier):
             return BCEWithLogitsLoss(pos_weight=self.class_weights_)
         else:
             return CrossEntropyLoss(weight=self.class_weights_)
+
+    def _get_optimizer_and_scheduler(self, optimizer, scheduler, params, num_epochs, sub_train):
+
+        if optimizer is None or scheduler is None:
+            if optimizer is not None:
+                # TODO: find a better formulation for this
+                # TODO: is one warning enough?
+                self.logger.warning('Overridering optimizer since optimizer in kwargs needs to be '
+                                    'passed in combination with scheduler')
+            if scheduler is not None:
+                self.logger.warning('Overridering scheduler since optimizer in kwargs needs to be '
+                                    'passed in combination with scheduler')
+
+            optimizer, scheduler = self._initialize_optimizer_and_scheduler(optimizer,
+                                                                            scheduler,
+                                                                            params,
+                                                                            num_epochs,
+                                                                            sub_train,
+                                                                            self.lr,
+                                                                            self.model)
+        return optimizer, scheduler
+
+    def _initialize_optimizer_and_scheduler(self, optimizer, scheduler, params, num_epochs,
+                                            sub_train, base_lr, model):
+
+        steps = (len(sub_train) // self.mini_batch_size) \
+                + int(len(sub_train) % self.mini_batch_size != 0)
+
+        if params is None:
+            params = [param for param in model.parameters() if param.requires_grad]
+
+        optimizer = self._default_optimizer(params, base_lr) if optimizer is None else optimizer
+
+        if scheduler == 'linear':
+            scheduler = get_linear_schedule_with_warmup(optimizer,
+                                                        num_warmup_steps=0,
+                                                        num_training_steps=steps*num_epochs)
+        elif scheduler is None:
+            # constant learning rate
+            scheduler = LambdaLR(optimizer, lambda _: 1)
+        elif not isinstance(scheduler, _LRScheduler):
+            raise ValueError(f'Invalid scheduler: {scheduler}')
+
+        return optimizer, scheduler
 
     def initialize_class_weights(self, sub_train):
         if self.class_weight == 'balanced':

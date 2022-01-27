@@ -26,8 +26,9 @@ try:
     import torch
     import torch.nn.functional as F
 
-    from torch.optim.lr_scheduler import _LRScheduler
     from torch.utils.data import DataLoader
+    from transformers import AdamW
+    from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 
     from small_text.integrations.pytorch.classifiers.base import PytorchClassifier
     from small_text.integrations.pytorch.model_selection import Metric, PytorchModelSelection
@@ -35,10 +36,6 @@ try:
     from small_text.integrations.transformers.datasets import TransformersDataset
 except ImportError:
     raise PytorchNotFoundError('Could not import pytorch')
-
-
-from transformers import AdamW, get_linear_schedule_with_warmup
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 
 
 def transformers_collate_fn(batch, enc=None):
@@ -216,10 +213,10 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
     def __init__(self, transformer_model, num_classes, multi_label=False, num_epochs=10, lr=2e-5,
                  mini_batch_size=12, validation_set_size=0.1, validations_per_epoch=1,
-                 no_validation_set_action='sample', initial_model_selection=None,
-                 early_stopping_no_improvement=5, early_stopping_acc=-1, model_selection=True,
-                 fine_tuning_arguments=None, device=None, memory_fix=1, class_weight=None,
-                 verbosity=VERBOSITY_MORE_VERBOSE, cache_dir='.active_learning_lib_cache/'):
+                 no_validation_set_action='sample', early_stopping_no_improvement=5,
+                 early_stopping_acc=-1, model_selection=True, fine_tuning_arguments=None,
+                 device=None, memory_fix=1, class_weight=None, verbosity=VERBOSITY_MORE_VERBOSE,
+                 cache_dir='.active_learning_lib_cache/'):
         """
         Parameters
         ----------
@@ -246,8 +243,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             Defines how of the validation set is evaluated during the training of a single epoch.
         no_validation_set_action : {'sample', 'none}
             Defines what should be done of no validation set is given.
-        initial_model_selection :
-
         early_stopping_no_improvement :
 
         early_stopping_acc :
@@ -265,7 +260,7 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         class_weight : 'balanced' or None
 
         """
-        super().__init__(device=device)
+        super().__init__(multi_label=multi_label, device=device, mini_batch_size=mini_batch_size)
 
         with verbosity_logger():
             self.logger = logging.getLogger(__name__)
@@ -273,10 +268,8 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
         # Training parameters
         self.num_classes = num_classes
-        self.multi_label = multi_label
         self.num_epochs = num_epochs
         self.lr = lr
-        self.mini_batch_size = mini_batch_size
 
         self.criterion = None
         self.optimizer = None
@@ -286,7 +279,6 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         self.validations_per_epoch = validations_per_epoch
         # 'sample' or 'none'
         self.no_validation_set_action = no_validation_set_action
-        self.initial_model_selection = initial_model_selection
 
         # Huggingface
         self.transformer_model = transformer_model
@@ -367,30 +359,13 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
         if self.criterion is None:
             self.criterion = self.get_default_criterion()
 
-        if self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-
         if self.fine_tuning_arguments is not None:
             params = _get_layer_params(self.model, self.lr, self.fine_tuning_arguments)
         else:
             params = None
 
-        if optimizer is None or scheduler is None:
-            if optimizer is not None:
-                self.logger.warning('Overridering optimizer since optimizer in kwargs needs to be '
-                                    'passed in combination with scheduler')
-            if scheduler is not None:
-                self.logger.warning('Overridering scheduler since optimizer in kwargs needs to be '
-                                    'passed in combination with scheduler')
-
-            optimizer, scheduler = self._initialize_optimizer_and_scheduler(optimizer,
-                                                                            scheduler,
-                                                                            self.fine_tuning_arguments,
-                                                                            self.lr,
-                                                                            params,
-                                                                            self.model,
-                                                                            sub_train)
-
+        optimizer, scheduler = self._get_optimizer_and_scheduler(optimizer, scheduler, params,
+                                                                 self.num_epochs, sub_train)
         self.model = self.model.to(self.device)
 
         with tempfile.TemporaryDirectory(dir=get_tmp_dir_base()) as tmp_dir:
@@ -417,111 +392,20 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
             cache_dir=cache_dir,
         )
 
-    def _initialize_optimizer_and_scheduler(self, optimizer, scheduler, fine_tuning_arguments,
-                                            base_lr, params, model, sub_train):
-
-        steps = (len(sub_train) // self.mini_batch_size) \
-                + int(len(sub_train) % self.mini_batch_size != 0)
-
-        if params is None:
-            params = [param for param in model.parameters() if param.requires_grad]
-
-        optimizer = self._default_optimizer(params, base_lr) if optimizer is None else optimizer
-
-        if scheduler == 'linear':
-            scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                        num_warmup_steps=0,
-                                                        num_training_steps=steps*self.num_epochs)
-        elif not isinstance(scheduler, _LRScheduler):
-            raise ValueError(f'Invalid scheduler: {scheduler}')
-
-        return optimizer, scheduler
-
     def _default_optimizer(self, params, base_lr):
         return AdamW(params, lr=base_lr, eps=1e-8)
 
     def _train(self, sub_train, sub_valid, tmp_dir, optimizer, scheduler):
 
-        if self.initial_model_selection:
-            if sub_valid is None:
-                raise ValueError('Error! Initial model selection requires a validation set')
-
-            with tempfile.TemporaryDirectory(dir=get_tmp_dir_base()) as mselection_tmp_dir:
-                self._perform_initial_model_selection(sub_train, sub_valid, mselection_tmp_dir)
-            start_epoch = self.initial_model_selection[1]
-        else:
-            start_epoch = 0
-
         metrics = [Metric('valid_loss', True), Metric('valid_acc', False),
                    Metric('train_loss', True), Metric('train_acc', False)]
         self.model_selection_manager = PytorchModelSelection(Path(tmp_dir), metrics)
 
+        start_epoch = 0
         self._train_loop(sub_train, sub_valid, optimizer, scheduler, start_epoch, self.num_epochs,
                          self.model_selection_manager)
 
         return self
-
-    # TODO: uses default optimizer and scheduler for now
-    def _perform_initial_model_selection(self, sub_train, sub_valid, tmp_dir):
-
-        num_models = self.initial_model_selection[0]
-        num_epochs = self.initial_model_selection[1]
-
-        metrics = [Metric('valid_loss', True), Metric('valid_acc', False),
-                   Metric('train_loss', True), Metric('train_acc', False)]
-
-        model_selection_managers = []
-
-        for j in range(num_models):
-
-            tmp_dir_local = Path(tmp_dir).joinpath(f'{j}/').absolute()
-            os.mkdir(tmp_dir_local)
-
-            model_selection_manager = PytorchModelSelection(Path(tmp_dir_local), metrics)
-            self.initialize_transformer(self.cache_dir)
-            self.model = self.model.to(self.device)
-
-            # add initial entry since we want to restore the first model at the end
-            fill = dict({metric.name: float('inf') if metric.lower_is_better else float('-inf')
-                         for metric in metrics})
-            model_selection_manager.add_model(self.model, 0, **fill)
-
-            optimizer_mod, scheduler_mod = self._initialize_optimizer_and_scheduler(None,
-                                                                                    'linear',
-                                                                                    self.fine_tuning_arguments,
-                                                                                    self.lr,
-                                                                                    None,
-                                                                                    self.model,
-                                                                                    sub_train)
-
-            self._train_loop(sub_train, sub_valid, optimizer_mod, scheduler_mod, 0, num_epochs, model_selection_manager)
-            model_selection_managers.append(model_selection_manager)
- 
-        # relativ to metric list above
-        target_metric = 0
-
-        best_metric = None
-        best_model = -1
-
-        for j, model_selection_manager in enumerate(model_selection_managers):
-            model_path, model_metrics = model_selection_manager.select_best()
-
-            if best_metric is None:
-                best_metric = model_metrics[target_metric]
-                best_model = j
-            else:
-                if metrics[target_metric].lower_is_better:
-                    is_better = model_metrics[target_metric] < best_metric
-                else:
-                    is_better = model_metrics[target_metric] > best_metric
-
-                if is_better:
-                    best_metric = model_metrics[target_metric]
-                    best_model = j
-
-        # load the first model (untrained) from the best selection process
-        best_key = list(model_selection_managers[best_model].models.keys())[0]
-        self.model.load_state_dict(torch.load(model_selection_managers[best_model].models[best_key]))
 
     def _train_loop(self, sub_train, sub_valid, optimizer, scheduler, start_epoch, num_epochs,
                     model_selection_manager):
@@ -752,7 +636,8 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
 
     def __del__(self):
         try:
-            del self.criterion, self.optimizer, self.scheduler
-            del self.model, self.tokenizer, self.config
-        except:
+            for o in [self.criterion, self.optimizer, self.scheduler, self.model,
+                      self.tokenizer, self.config]:
+                del o
+        except Exception:
             pass
