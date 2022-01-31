@@ -290,9 +290,9 @@ class NestedPytorchDatasetViewSingleLabelTest(unittest.TestCase, _PytorchDataset
         self.is_multi_label = False
 
         ds = random_text_classification_dataset(num_samples=self.NUM_SAMPLES,
-                                                     multi_label=self.is_multi_label,
-                                                     num_classes=num_labels,
-                                                     target_labels='explicit')
+                                                multi_label=self.is_multi_label,
+                                                num_classes=num_labels,
+                                                target_labels='explicit')
         ds_view_outer = PytorchDatasetView(ds, np.s_[:self.NUM_SAMPLES_VIEW_OUTER])
         return PytorchDatasetView(ds_view_outer, np.s_[:self.NUM_SAMPLES_VIEW])
 
@@ -306,8 +306,8 @@ class NestedPytorchDatasetViewMultiLabelTest(unittest.TestCase, _PytorchDatasetV
         self.is_multi_label = True
 
         ds = random_text_classification_dataset(num_samples=self.NUM_SAMPLES,
-                                                     multi_label=self.is_multi_label,
-                                                     num_classes=num_labels,
-                                                     target_labels='explicit')
+                                                multi_label=self.is_multi_label,
+                                                num_classes=num_labels,
+                                                target_labels='explicit')
         ds_view_outer = PytorchDatasetView(ds, np.s_[:self.NUM_SAMPLES_VIEW_OUTER])
         return PytorchDatasetView(ds_view_outer, np.s_[:self.NUM_SAMPLES_VIEW])

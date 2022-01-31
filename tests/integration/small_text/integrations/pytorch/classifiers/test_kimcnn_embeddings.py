@@ -17,6 +17,10 @@ except PytorchNotFoundError:
     pass
 
 
+def default_module_selector(m):
+    return m['fc']
+
+
 @pytest.mark.pytorch
 @parameterized_class([{'embedding_method': 'pooled'},
                       {'embedding_method': 'gradient'}])
@@ -41,7 +45,7 @@ class KimCNNEmbeddingTest(unittest.TestCase):
 
         kwargs = dict()
         if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
-            kwargs['module_selector'] = lambda m: m['fc']
+            kwargs['module_selector'] = default_module_selector
 
         embedding_matrix = torch.Tensor(np.random.rand(len(train.vocab), 100))
         classifier = KimCNNClassifier(6, embedding_matrix=embedding_matrix)
@@ -72,8 +76,9 @@ class KimCNNEmbeddingTest(unittest.TestCase):
         _, train = trec_dataset()  # use small test set as train
 
         kwargs = dict()
+
         if self.embedding_method == KimCNNEmbeddingMixin.EMBEDDING_METHOD_GRADIENT:
-            kwargs['module_selector'] = lambda m: m['fc']
+            kwargs['module_selector'] = default_module_selector
 
         embedding_matrix = torch.Tensor(np.random.rand(len(train.vocab), 100))
         classifier = KimCNNClassifier(6, embedding_matrix=embedding_matrix)

@@ -1,9 +1,5 @@
 import unittest
-import pytest
 
-import numpy as np
-
-from parameterized import parameterized_class
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
 
 try:

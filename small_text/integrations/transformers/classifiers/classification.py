@@ -12,7 +12,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 from small_text.classifiers.classification import EmbeddingMixin
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
-from small_text.utils.classification import empty_result, get_splits, prediction_result
+from small_text.utils.classification import empty_result, get_splits
 from small_text.utils.context import build_pbar_context
 from small_text.utils.data import check_training_data
 from small_text.utils.data import list_length

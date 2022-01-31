@@ -21,8 +21,7 @@ try:
 
     from small_text.integrations.transformers import TransformerModelArguments
     from small_text.integrations.transformers.classifiers import TransformerBasedClassificationFactory, TransformerBasedClassification
-    from small_text.integrations.transformers.classifiers.classification import FineTuningArguments, _get_layer_params
-    from small_text.integrations.transformers.datasets import TransformersDataset
+    from small_text.integrations.transformers.classifiers.classification import FineTuningArguments
 
     from tests.utils.datasets import random_transformer_dataset
 except (ImportError, PytorchNotFoundError):
@@ -174,7 +173,7 @@ class _TransformerBasedClassificationTest(object):
         self.assertIsNotNone(clf.class_weights_)
         self.assertIsNotNone(clf.model)
 
-    def test_predict_and_validate(self):
+    def test_fit_and_predict(self):
         model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
         clf = TransformerBasedClassification(model_args,
                                              4,
@@ -184,10 +183,17 @@ class _TransformerBasedClassificationTest(object):
 
         train_set = self._get_dataset(num_samples=20)
         test_set = self._get_dataset(num_samples=10)
-        valid_set = self._get_dataset(num_samples=5)
 
         clf.fit(train_set)
-        y_pred = clf.predict(test_set)
+
+        with mock.patch.object(clf.model, 'eval', wraps=clf.model.eval) as model_eval_spy, \
+             mock.patch.object(clf.model, 'train', wraps=clf.model.train) as model_train_spy:
+
+             y_pred = clf.predict(test_set)
+
+             model_eval_spy.assert_called()
+             model_train_spy.assert_called_once_with(False)
+
         if self.multi_label:
             self.assertTrue(issparse(y_pred))
             self.assertEqual(y_pred.dtype, np.int64)
@@ -197,7 +203,28 @@ class _TransformerBasedClassificationTest(object):
             self.assertTrue(np.all([isinstance(y, np.int64) for y in y_pred]))
             self.assertTrue(np.logical_or(y_pred.all() >= 0, y_pred.all() <= 3))
 
-        valid_loss, valid_acc = clf.validate(valid_set)
+    def test_fit_validate(self):
+
+        model_args = TransformerModelArguments('sshleifer/tiny-distilroberta-base')
+        clf = TransformerBasedClassification(model_args,
+                                             4,
+                                             multi_label=self.multi_label,
+                                             class_weight='balanced',
+                                             num_epochs=1)
+
+        train_set = self._get_dataset(num_samples=20)
+        valid_set = self._get_dataset(num_samples=5)
+
+        clf.fit(train_set)
+
+        with mock.patch.object(clf.model, 'eval', wraps=clf.model.eval) as model_eval_spy, \
+             mock.patch.object(clf.model, 'train', wraps=clf.model.train) as model_train_spy:
+
+            valid_loss, valid_acc = clf.validate(valid_set)
+
+            model_eval_spy.assert_called()
+            model_train_spy.assert_called_once_with(False)
+
         self.assertTrue(valid_loss >= 0)
         self.assertTrue(0.0 <= valid_acc <= 1.0)
 

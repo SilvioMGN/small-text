@@ -12,12 +12,9 @@ from small_text.classifiers.classification import EmbeddingMixin
 from small_text.integrations.pytorch.classifiers.base import PytorchClassifier
 from small_text.integrations.pytorch.exceptions import PytorchNotFoundError
 from small_text.integrations.pytorch.models.kimcnn import KimCNN
-from small_text.utils.classification import empty_result
-from small_text.utils.classification import get_splits
-from small_text.utils.classification import prediction_result
+from small_text.utils.classification import empty_result, get_splits
 from small_text.utils.context import build_pbar_context
-from small_text.utils.data import check_training_data
-from small_text.utils.data import list_length
+from small_text.utils.data import check_training_data, list_length
 from small_text.utils.labels import csr_to_list, get_num_labels
 from small_text.utils.datetime import format_timedelta
 from small_text.utils.logging import verbosity_logger, VERBOSITY_MORE_VERBOSE
@@ -395,7 +392,6 @@ class KimCNNClassifier(KimCNNEmbeddingMixin, PytorchClassifier):
         valid_loss = 0.
         acc = 0.
 
-        # TODO: check eval
         self.model.eval()
         valid_iter = dataloader(validation_set.data, self.mini_batch_size, self._create_collate_fn(),
                                 train=False)

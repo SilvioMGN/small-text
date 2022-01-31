@@ -1,11 +1,12 @@
 ==========
-small-text
+Small-Text
 ==========
 
-[|LIBRARY_VERSION|]
+`Small-Text` provides :doc:`active learning<active_learning>` for text classification.
+It is designed to offer a robust and modular set of components for both experimental and applied active learning.
 
-`small-text` provides :doc:`active_learning` for Text Classification.
-It is designed to offer a robust and modular set of components for both experimental and applied Active Learning.
+
+Current Version: [|LIBRARY_VERSION|]
 
 Getting Started
 ===============

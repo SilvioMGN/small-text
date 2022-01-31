@@ -23,6 +23,30 @@ def get_splits(train_set, validation_set, multi_label=False, validation_set_size
 
 # TODO: unittest
 def prediction_result(proba, multi_label, num_classes, enc=None, return_proba=False):
+    """Helper method which returns a single- or multi-label prediction result.
+
+    Parameters
+    ----------
+    proba :
+
+    multi_label : bool
+
+    num_classes : int
+        The number of classes.
+    enc : sklearn.preprocessing.MultiLabelBinarizer
+
+    return_proba : bool
+        Also returns the probability if `True`. This is intended to be used with `multi_label=True`
+        where it returns a sparse matrix with only the probabilities for the predicted labels. For
+        the single-label case this simply returns the given `proba` input.
+
+    Returns
+    -------
+    result : np.ndarray[int] or csr_matrix
+        An empty ndarray of predictions if `return_prediction` is True.
+    proba : np.ndarray[float] or csr_matrix[np.float64]
+        An empty ndarray of predictions if `return_prediction` is True.
+    """
     if multi_label:
         predictions_binarized = np.where(proba > 0.5, 1, 0)
         if enc is not None:
@@ -48,9 +72,8 @@ def prediction_result(proba, multi_label, num_classes, enc=None, return_proba=Fa
 
 
 def empty_result(multi_label, num_classes, return_prediction=True, return_proba=True):
-    """
-    Helper method which returns an empty classification result. This ensures that all results have
-    the correct dtype.
+    """Helper method which returns an empty classification result. This ensures that all results
+    have the correct dtype.
 
     At least one of `prediction` and `proba` must be `True`.
 

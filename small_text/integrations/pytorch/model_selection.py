@@ -80,7 +80,7 @@ class PytorchModelSelection(object):
 
         logger.info('Using last model {}'.format(model_number))
         self.selected_model = model_number
-        # TODO: is "last_model_key" right?
+
         return self.models[last_model_key], last_model_key
 
     def _get_sort_key(self, x):
