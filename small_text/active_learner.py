@@ -112,8 +112,8 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         self.y = None
         self.queried_indices = None
 
-    def initialize_data(self, x_indices_initial, y_initial, x_indices_ignored=None, x_indices_validation=None,
-                        retrain=True):
+    def initialize_data(self, x_indices_initial, y_initial, x_indices_ignored=None,
+                        x_indices_validation=None, retrain=True):
         """(Re-)Initializes the current labeled pool.
 
         This is required once before the first `query()` call, and whenever the labeled pool

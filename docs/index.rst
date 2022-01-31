@@ -21,7 +21,7 @@ Getting Started
    data_structures
    classification
 
-For now, the best way to get started is the `examples/ <https://github.com/webis-de/small-text/tree/master/examples>`_ folder in the github directory.
+For now, the best way to get started is checking out the folders `examples/notebooks/ <https://github.com/webis-de/small-text/tree/master/examples/notebooks>`_ and `examples/examplecode/ <https://github.com/webis-de/small-text/tree/master/examples/examplecode>`_ in the github directory.
 
 Active Learning Components
 ==========================
@@ -69,6 +69,24 @@ such as :doc:`patterns/pool` and :doc:`patterns/serialization`.
    patterns/pool
    patterns/serialization
 
+Citation
+========
+
+A preprint which introduces small-text is available here:
+`Small-text: Active Learning for Text Classification in Python <https://arxiv.org/abs/2107.10314>`_.
+
+.. code-block:: text
+
+    @misc{schroeder2021smalltext,
+        title={Small-text: Active Learning for Text Classification in Python},
+        author={Christopher Schröder and Lydia Müller and Andreas Niekler and Martin Potthast},
+        year={2021},
+        eprint={2107.10314},
+        archivePrefix={arXiv},
+        primaryClass={cs.LG}
+    }
+
+------
 
 Extensions
 ==========
@@ -90,23 +108,6 @@ API
 :doc:`api/classifier`
 :doc:`api/data_set`
 
-
-Citation
-========
-
-A preprint which introduces small-text is available here:
-`Small-text: Active Learning for Text Classification in Python <https://arxiv.org/abs/2107.10314>`_.
-
-.. code-block:: text
-
-    @misc{schroeder2021smalltext,
-        title={Small-text: Active Learning for Text Classification in Python},
-        author={Christopher Schröder and Lydia Müller and Andreas Niekler and Martin Potthast},
-        year={2021},
-        eprint={2107.10314},
-        archivePrefix={arXiv},
-        primaryClass={cs.LG}
-    }
 
 ----
 :ref:`genindex` | :ref:`modindex` | :ref:`search`

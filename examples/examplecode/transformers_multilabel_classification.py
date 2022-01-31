@@ -1,4 +1,4 @@
-"""Example of a transformer-based active learning multi-class text classification.
+"""Example of a transformer-based active learning multi-label text classification.
 """
 import logging
 
@@ -7,42 +7,44 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from small_text.active_learner import PoolBasedActiveLearner
-from small_text.initialization import random_initialization_balanced
+from small_text.initialization import random_initialization_stratified
 from small_text.integrations.transformers import TransformerModelArguments
 from small_text.integrations.transformers.classifiers.factories import TransformerBasedClassificationFactory
 from small_text.query_strategies import PoolExhaustedException, EmptyPoolException
 from small_text.query_strategies import RandomSampling
 
-from examplecode.data.corpus_twenty_news import get_twenty_newsgroups_corpus
+from examplecode.data.example_data_multilabel import (
+    get_train_test
+)
 from examplecode.data.example_data_transformers import preprocess_data
-from examplecode.shared import evaluate
+from examplecode.shared import evaluate_multi_label
 
 
 TRANSFORMER_MODEL = TransformerModelArguments('distilroberta-base')
 
-TWENTY_NEWS_SUBCATEGORIES = ['rec.sport.baseball', 'sci.med', 'rec.autos']
-
 
 def main():
     # Active learning parameters
-    num_classes = len(TWENTY_NEWS_SUBCATEGORIES)
+    num_classes = 28
     clf_factory = TransformerBasedClassificationFactory(TRANSFORMER_MODEL,
                                                         num_classes,
-                                                        kwargs=dict({'device': 'cuda'}))
+                                                        kwargs=dict({
+                                                            'device': 'cuda',
+                                                            'multi_label': True
+                                                        }))
     query_strategy = RandomSampling()
 
     # Prepare some data
-    train, test = get_twenty_newsgroups_corpus(categories=TWENTY_NEWS_SUBCATEGORIES)
+    train, test = get_train_test()
 
     tokenizer = AutoTokenizer.from_pretrained(TRANSFORMER_MODEL.model, cache_dir='.cache/')
-    x_train = preprocess_data(tokenizer, train.data, train.target)
-    y_train = train.target
+    x_train = preprocess_data(tokenizer, train['text'], train['labels'], multi_label=True)
 
-    x_test = preprocess_data(tokenizer, test.data, test.target)
+    x_test = preprocess_data(tokenizer, test['text'], test['labels'], multi_label=True)
 
     # Active learner
     active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, x_train)
-    labeled_indices = initialize_active_learner(active_learner, y_train)
+    labeled_indices = initialize_active_learner(active_learner, x_train.y)
 
     try:
         perform_active_learning(active_learner, x_train, labeled_indices, x_test)
@@ -57,7 +59,7 @@ def perform_active_learning(active_learner, train, labeled_indices, test):
     # Perform 10 iterations of active learning...
     for i in range(10):
         # ...where each iteration consists of labelling 20 samples
-        q_indices = active_learner.query(num_samples=20)
+        q_indices = active_learner.query(num_samples=1000)
 
         # Simulate user interaction here. Replace this for real-world usage.
         y = train.y[q_indices]
@@ -68,13 +70,13 @@ def perform_active_learning(active_learner, train, labeled_indices, test):
         labeled_indices = np.concatenate([q_indices, labeled_indices])
 
         print('Iteration #{:d} ({} samples)'.format(i, len(labeled_indices)))
-        evaluate(active_learner, train[labeled_indices], test)
+        evaluate_multi_label(active_learner, train[labeled_indices], test)
 
 
 def initialize_active_learner(active_learner, y_train):
 
-    x_indices_initial = random_initialization_balanced(y_train)
-    y_initial = np.array([y_train[i] for i in x_indices_initial])
+    x_indices_initial = random_initialization_stratified(y_train, n_samples=2000)
+    y_initial = y_train[x_indices_initial]
 
     active_learner.initialize_data(x_indices_initial, y_initial)
 
