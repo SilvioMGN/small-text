@@ -60,7 +60,7 @@ class PytorchModelSelection(object):
         model_path = Path(self.save_directory).joinpath('model_epoch_{}.pt'.format(epoch))
         torch.save(model.state_dict(), model_path)
         model_id = tuple(kwargs[metric.name] for metric in self.metrics.values()) \
-                   + (epoch, len(self.models))
+            + (epoch, len(self.models))
         self.models[model_id] = model_path
 
     def select_best(self):

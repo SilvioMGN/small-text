@@ -4,10 +4,14 @@ import numpy as np
 from unittest.mock import call, patch, Mock, ANY
 from numpy.testing import assert_array_equal
 from scipy import sparse
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, vstack
 
-from small_text.active_learner import (PoolBasedActiveLearner,
-                                       ActiveLearner, AbstractPoolBasedActiveLearner)
+from small_text.active_learner import (
+    AbstractPoolBasedActiveLearner,
+    ActiveLearner,
+    PoolBasedActiveLearner
+)
+from small_text.base import LABEL_IGNORED
 from small_text.exceptions import LearnerNotInitializedException
 from small_text.classifiers import ConfidenceEnhancedLinearSVC
 from small_text.classifiers.factories import SklearnClassifierFactory
@@ -15,8 +19,7 @@ from small_text.data import SklearnDataset
 from small_text.query_strategies import RandomSampling
 
 from tests.utils.datasets import random_matrix_data
-from tests.utils.testing import assert_csr_matrix_equal
-from tests.utils.testing import assert_labels_equal
+from tests.utils.testing import assert_csr_matrix_equal, assert_labels_equal
 
 
 class ActiveLearnerTest(unittest.TestCase):
@@ -35,10 +38,14 @@ class AbstractPoolBasedActiveLearnerTest(unittest.TestCase):
 
 class _PoolBasedActiveLearnerTest(object):
 
-    dataset_num_samples = 100
+    NUM_CLASSES = 5
+
+    NUM_SAMPLES = 100
 
     def _get_classifier_factory(self):
-        raise NotImplementedError()
+        return SklearnClassifierFactory(ConfidenceEnhancedLinearSVC(),
+                                        self.NUM_CLASSES,
+                                        kwargs=dict({ 'multi_label': self.multi_label }))
 
     def _set_up_active_learner(self):
         clf_factory = self._get_classifier_factory()
@@ -52,21 +59,40 @@ class _PoolBasedActiveLearnerTest(object):
 
         return active_learner
 
-    def _get_random_data(self, num_samples=100):
-        raise NotImplementedError('this method must be overridden')
-
     def _get_random_dataset(self, num_samples=100):
-        raise NotImplementedError('this method must be overridden')
+        if self.multi_label:
+            return SklearnDataset(*random_matrix_data('dense', 'sparse', self.NUM_SAMPLES))
+        else:
+            return SklearnDataset(*random_matrix_data('dense', 'dense', self.NUM_SAMPLES))
 
     def _get_random_labels(self, num_samples=100, num_labels=2):
-        raise NotImplementedError('this method must be overridden')
+        if self.multi_label:
+            return sparse.random(num_samples, num_labels, density=0.5, format='csr')
+        else:
+            return np.random.randint(0, high=self.NUM_CLASSES, size=num_samples)
+
+    def _get_y_initial(self):
+        if self.multi_label:
+            return csr_matrix(np.array([
+                [0, 0], [0, 1], [1, 0], [1, 0], [0, 1],
+                [1, 1], [0, 0], [1, 0], [0, 0], [1, 0]
+            ]))
+        else:
+            return np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+
+    def _get_y_new(self):
+        if self.multi_label:
+            _, y_new = random_matrix_data('dense', 'sparse', 5)
+        else:
+            y_new = np.random.randint(0, 1, size=5)
+        return y_new
 
     def test_init(self):
 
         clf_factory = self._get_classifier_factory()
         query_strategy = RandomSampling()
 
-        x = self._get_random_data()
+        x = self._get_random_dataset()
 
         active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, x)
 
@@ -100,11 +126,11 @@ class _PoolBasedActiveLearnerTest(object):
         x = np.random.rand(100, 10)
 
         active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, x)
-        self.assertIsNone(active_learner._label_to_position)
+        self.assertIsNone(active_learner._x_index_to_position)
         assert_array_equal(np.empty(0, dtype=np.int64), active_learner.x_indices_labeled)
         assert_array_equal(np.empty(0, dtype=np.int64), active_learner.y)
 
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         if x_indices_validation == 'random':
             x_indices_labeled_indices = list(range(len(x_indices_initial)))
             x_indices_validation = np.random.choice(x_indices_labeled_indices, size=1, replace=False)
@@ -113,8 +139,11 @@ class _PoolBasedActiveLearnerTest(object):
                                        x_indices_ignored=x_indices_ignored,
                                        x_indices_validation=x_indices_validation)
 
-        self.assertIsNotNone(active_learner._label_to_position)
-        assert_array_equal(y_initial, active_learner.y)
+        self.assertIsNotNone(active_learner._x_index_to_position)
+        if self.multi_label:
+            assert_csr_matrix_equal(y_initial, active_learner.y)
+        else:
+            assert_array_equal(y_initial, active_learner.y)
         assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
         if x_indices_ignored is not None:
             assert_array_equal(x_indices_ignored, active_learner.x_indices_ignored)
@@ -222,18 +251,25 @@ class _PoolBasedActiveLearnerTest(object):
             active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, x)
 
             x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-            y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+            y_initial = self._get_y_initial()
             active_learner.initialize_data(x_indices_initial, y_initial)
 
             assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
-            assert_array_equal(y_initial, active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(y_initial, active_learner.y)
+            else:
+                assert_array_equal(y_initial, active_learner.y)
 
             indices_new = active_learner.query(num_samples=5)
-            y_new = np.random.randint(0, 1, size=5)
+            y_new = self._get_y_new()
             active_learner.update(y_new)
+
             assert_array_equal(np.concatenate([x_indices_initial, indices_new]),
                                active_learner.x_indices_labeled)
-            assert_array_equal(np.concatenate([y_initial, y_new]), active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(vstack([y_initial, y_new]), active_learner.y)
+            else:
+                assert_array_equal(np.concatenate([y_initial, y_new]), active_learner.y)
 
         retrain_mock.assert_called_with(x_indices_validation=None)
 
@@ -246,18 +282,35 @@ class _PoolBasedActiveLearnerTest(object):
             active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, ds)
 
             x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-            y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+            y_initial = self._get_y_initial()
             active_learner.initialize_data(x_indices_initial, y_initial)
 
             assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
-            assert_array_equal(y_initial, active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(y_initial, active_learner.y)
+            else:
+                assert_array_equal(y_initial, active_learner.y)
 
             indices_new = active_learner.query(num_samples=5)
-            y_new = np.array([-np.inf, 1, -np.inf, 0, -np.inf])  # ignore samples 0, 2, and 4
+            if self.multi_label:
+                y_new = np.array([
+                    [LABEL_IGNORED, LABEL_IGNORED],
+                    [0, 1],
+                    [LABEL_IGNORED, LABEL_IGNORED],
+                    [0, 0],
+                    [LABEL_IGNORED, LABEL_IGNORED],
+                ])
+                y_new = csr_matrix(y_new)
+            else:
+                y_new = np.array([LABEL_IGNORED, 1, LABEL_IGNORED, 0, LABEL_IGNORED])  # ignore samples 0, 2, and 4
             active_learner.update(y_new)
             assert_array_equal(np.concatenate([x_indices_initial, [indices_new[1], indices_new[3]]]),
                                active_learner.x_indices_labeled)
-            assert_array_equal(np.concatenate([y_initial, [y_new[1], y_new[3]]]), active_learner.y)
+
+            if self.multi_label:
+                assert_csr_matrix_equal(vstack([y_initial, y_new[[1, 3], :]]), active_learner.y)
+            else:
+                assert_array_equal(np.concatenate([y_initial, y_new[[1, 3]]]), active_learner.y)
 
         retrain_mock.assert_called_with(x_indices_validation=None)
 
@@ -274,10 +327,13 @@ class _PoolBasedActiveLearnerTest(object):
             active_learner.initialize_data(x_indices_initial, y_initial)
 
             assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
-            assert_labels_equal(y_initial, active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(y_initial, active_learner.y)
+            else:
+                assert_array_equal(y_initial, active_learner.y)
 
             active_learner.query(num_samples=query_size)
-            y_new = np.array([-np.inf]*query_size)  # ignore all samples
+            y_new = np.array([LABEL_IGNORED]*query_size)  # ignore all samples
             active_learner.update(y_new)
 
             assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
@@ -294,20 +350,26 @@ class _PoolBasedActiveLearnerTest(object):
             active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, ds)
 
             x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-            y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+            y_initial = self._get_y_initial()
             x_indices_validation = np.random.choice(x_indices_initial, size=10, replace=False)
 
             active_learner.initialize_data(x_indices_initial, y_initial, x_indices_validation=x_indices_validation)
 
             assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
-            assert_array_equal(y_initial, active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(y_initial, active_learner.y)
+            else:
+                assert_array_equal(y_initial, active_learner.y)
 
             indices_new = active_learner.query(num_samples=5)
-            y_new = np.random.randint(0, 1, size=5)
+            y_new = self._get_y_new()
             active_learner.update(y_new, x_indices_validation=x_indices_validation)
             assert_array_equal(np.concatenate([x_indices_initial, indices_new]),
                                active_learner.x_indices_labeled)
-            assert_array_equal(np.concatenate([y_initial, y_new]), active_learner.y)
+            if self.multi_label:
+                assert_csr_matrix_equal(vstack([y_initial, y_new]), active_learner.y)
+            else:
+                assert_array_equal(np.concatenate([y_initial, y_new]), active_learner.y)
 
         retrain_mock.assert_has_calls([call(x_indices_validation=x_indices_validation),
                                        call(x_indices_validation=x_indices_validation)])
@@ -325,15 +387,18 @@ class _PoolBasedActiveLearnerTest(object):
         active_learner = PoolBasedActiveLearner(clf_factory_mock, query_strategy, ds, incremental_training=True)
 
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         active_learner.initialize_data(x_indices_initial, y_initial)
 
         assert_array_equal(x_indices_initial, active_learner.x_indices_labeled)
-        assert_array_equal(y_initial, active_learner.y)
+        if self.multi_label:
+            assert_csr_matrix_equal(y_initial, active_learner.y)
+        else:
+            assert_array_equal(y_initial, active_learner.y)
 
         for _ in range(2):
             active_learner.query(num_samples=5)
-            y_new = np.random.randint(0, 1, size=5)
+            y_new = self._get_y_new()
             active_learner.update(y_new)
 
         clf_factory_mock.new.assert_called_once_with()
@@ -345,22 +410,25 @@ class _PoolBasedActiveLearnerTest(object):
 
         indices = active_learner.query(num_samples=5)
         self.assertEqual(5, len(indices))
+        if self.multi_label:
+            _, y_new = random_matrix_data('dense', 'sparse', 6)
+        else:
+            y_new = np.random.randint(0, 1, size=6)
 
-        y_new = np.random.randint(0, 1, size=6)
         with self.assertRaises(ValueError):
             active_learner.update(y_new)
 
     def test_update_duplicate_indices_in_labeled_pool(self):
         query_strategy = RandomSampling()
-        x = self._get_random_dataset()
+        ds = self._get_random_dataset()
 
         clf_factory = SklearnClassifierFactory(ConfidenceEnhancedLinearSVC(), self.NUM_CLASSES)
 
-        active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, x)
+        active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, ds)
         active_learner._retrain = Mock()
 
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
 
         active_learner.initialize_data(x_indices_initial, y_initial)
 
@@ -396,7 +464,7 @@ class _PoolBasedActiveLearnerTest(object):
 
             # query & update
             indices_new = active_learner.query(num_samples=5)
-            y_new = [0, 0, 0, 1, 1]
+            y_new = np.array([0, 0, 0, 1, 1])
             if x_indices_validation == 'random':
                 x_indices_validation = np.random.choice(x_indices_initial, size=10, replace=False)
             active_learner.update(y_new, x_indices_validation=x_indices_validation)
@@ -451,21 +519,21 @@ class _PoolBasedActiveLearnerTest(object):
     def test_ignore_sample_at(self):
         ds = self._get_random_dataset(num_samples=100)
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         unlabeled_indices = self._get_unlabeled_indices(x_indices_initial)
         self._test_ignore_sample_without_label_change(ds, x_indices_initial, y_initial, unlabeled_indices[0])
 
     def test_ignore_sample_at_with_retrain_true(self):
         ds = self._get_random_dataset(num_samples=100)
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         unlabeled_indices = self._get_unlabeled_indices(x_indices_initial)
         self._test_ignore_sample_without_label_change(ds, x_indices_initial, y_initial, unlabeled_indices[0], retrain=True)
 
     def test_ignore_sample_at_with_validation_set_given(self):
         ds = self._get_random_dataset(num_samples=100)
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         unlabeled_indices = self._get_unlabeled_indices(x_indices_initial)
         x_indices_validation = np.random.choice(x_indices_initial, size=3, replace=False)
         self._test_ignore_sample_without_label_change(ds, x_indices_initial, y_initial, unlabeled_indices[0],
@@ -474,13 +542,13 @@ class _PoolBasedActiveLearnerTest(object):
     def test_ignore_sample_at_with_label_removed(self):
         ds = self._get_random_dataset(num_samples=100)
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         self._test_ignore_sample_with_label_change(ds, x_indices_initial, y_initial, x_indices_initial[0])
 
     def test_ignore_sample_at_with_label_removed_and_retrain_true(self):
         ds = self._get_random_dataset(num_samples=100)
         x_indices_initial = np.random.choice(np.arange(100), size=10, replace=False)
-        y_initial = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+        y_initial = self._get_y_initial()
         self._test_ignore_sample_with_label_change(ds, x_indices_initial, y_initial, x_indices_initial[0], retrain=True)
 
     def test_ignore_sample_at_with_label_removed_and_retrain_true_and_validation_set_given(self):
@@ -543,23 +611,15 @@ class _PoolBasedActiveLearnerTest(object):
                                            call(x_indices_validation=x_indices_validation)])
 
 
-class PoolBasedActiveLearnerDenseLabelsTest(unittest.TestCase, _PoolBasedActiveLearnerTest):
+class PoolBasedActiveLearnerSingleLabelTest(unittest.TestCase, _PoolBasedActiveLearnerTest):
 
-    NUM_CLASSES = 5
-
-    def _get_random_data(self, num_samples=100):
-        return np.random.rand(num_samples, 10)
-
-    def _get_random_dataset(self, num_samples=100):
-        return SklearnDataset(*random_matrix_data('dense', 'dense', self.dataset_num_samples))
-
-    def _get_random_labels(self, num_samples=100):
-        return np.random.randint(0, high=self.NUM_CLASSES, size=num_samples)
+    def setUp(self):
+        self.multi_label = False
 
     def _set_up_active_learner(self):
         clf_factory = self._get_classifier_factory()
         query_strategy = RandomSampling()
-        ds = self._get_random_dataset(num_samples=self.dataset_num_samples)
+        ds = self._get_random_dataset(num_samples=self.NUM_SAMPLES)
         active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, ds)
         x_indices_initial = np.random.choice(np.arange(100), size=10)
         y_initial = ds.y[x_indices_initial]
@@ -567,27 +627,16 @@ class PoolBasedActiveLearnerDenseLabelsTest(unittest.TestCase, _PoolBasedActiveL
 
         return active_learner
 
-    def _get_classifier_factory(self):
-        return SklearnClassifierFactory(ConfidenceEnhancedLinearSVC(), self.NUM_CLASSES)
 
+class PoolBasedActiveLearnerMultiLabelTest(unittest.TestCase, _PoolBasedActiveLearnerTest):
 
-class PoolBasedActiveLearnerSparseLabelsTest(unittest.TestCase, _PoolBasedActiveLearnerTest):
-
-    NUM_CLASSES = 5
-
-    def _get_random_data(self, num_samples=100):
-        return np.random.rand(num_samples, 10)
-
-    def _get_random_dataset(self, num_samples=100):
-        return SklearnDataset(*random_matrix_data('dense', 'sparse', self.dataset_num_samples))
-
-    def _get_random_labels(self, num_samples=100, num_labels=5):
-        return sparse.random(num_samples, num_labels, density=0.5, format='csr')
+    def setUp(self):
+        self.multi_label = True
 
     def _set_up_active_learner(self):
         clf_factory = self._get_classifier_factory()
         query_strategy = RandomSampling()
-        ds = SklearnDataset(*random_matrix_data('dense', 'sparse', self.dataset_num_samples))
+        ds = SklearnDataset(*random_matrix_data('dense', 'sparse', self.NUM_SAMPLES))
         active_learner = PoolBasedActiveLearner(clf_factory, query_strategy, ds)
         x_indices_initial = np.random.choice(np.arange(100), size=10)
         y_initial = ds.y[x_indices_initial]
@@ -595,9 +644,4 @@ class PoolBasedActiveLearnerSparseLabelsTest(unittest.TestCase, _PoolBasedActive
 
         return active_learner
 
-    def _get_classifier_factory(self):
-        return SklearnClassifierFactory(ConfidenceEnhancedLinearSVC(),
-                                        self.NUM_CLASSES,
-                                        kwargs=dict({
-                                            'multi_label': True
-                                        }))
+

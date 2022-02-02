@@ -88,7 +88,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
     x_indices_ignored : numpy.ndarray or scipy.sparse.csr_matrix
         Indices of instances (relative to `self.x_train`) which have been ignored,
         i.e. which will never be returned by a query.
-    y : numpy.ndarray
+    y : numpy.ndarray or scipy.sparse.csr_matrix
         Labels for the the current labeled pool. Each tuple `(x_indices_labeled[i], y[i])`
         represents one labeled sample.
     queried_indices : numpy.ndarray or None
@@ -101,7 +101,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         self._clf_factory = clf_factory
         self._query_strategy = query_strategy
 
-        self._label_to_position = None
+        self._x_index_to_position = None
 
         self.x_train = x_train
         self.incremental_training = incremental_training
@@ -137,13 +137,13 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             Retrains the model after the update if True.
         """
         self.x_indices_labeled = x_indices_initial
-        self._label_to_position = self._build_label_to_position_index()
+        self._x_index_to_position = self._build_x_index_to_position_index()
         self.y = y_initial
 
         if isinstance(self.y, csr_matrix):
-            self.label_type = 'sparse'
+            self.multi_label = True
         else:
-            self.label_type = 'dense'
+            self.multi_label = False
 
         if x_indices_ignored is not None:
             self.x_indices_ignored = x_indices_ignored
@@ -177,7 +177,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         ValueError
             Thrown when args or kwargs are not used and consumed.
         """
-        if self._label_to_position is None:
+        if self._x_index_to_position is None:
             raise LearnerNotInitializedException()
 
         size = list_length(self.x_train)
@@ -209,20 +209,20 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
 
         Parameters
         ----------
-        y : list of int or numpy.ndarray
-            Labels provided in response to the previous query. Each label at index i corresponds to the sample x[i].
-            Setting the label to `None` will ignore the respective sample.
+        y : numpy.ndarray or scipy.sparse.csr_matrix
+            Labels provided in response to the previous query. Each label at index i corresponds
+            to the sample x[i] for single-label data (ndarray) and each row of labels at index i
+            corresponds to the sample x[i] for multi-label data (csr_matrix). Setting the label /
+            row of labels to ` small_text.base import LABEL_IGNORED` will ignore the respective
+            sample.
         x_indices_validation : numpy.ndarray
             The given indices (relative to `self.x_indices_labeled`) define a custom validation set
             if provided. Otherwise each classifier that uses a validation set will be responsible
             for creating a validation set.
         """
-        if isinstance(y, list):
-            y = np.array(y)
-
         if self.queried_indices.shape[0] != y.shape[0]:
             raise ValueError('Query-update mismatch: indices queried - {} / labels provided - {}'
-                             .format(len(self.queried_indices), len(y))
+                             .format(self.queried_indices.shape[0], y.shape[0])
                              )
 
         ignored = get_ignored_labels_mask(y, LABEL_IGNORED)
@@ -231,7 +231,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             self.x_indices_ignored = np.concatenate([self.x_indices_ignored, self.queried_indices[ignored]])
 
         self.x_indices_labeled = np.concatenate([self.x_indices_labeled, self.queried_indices[~ignored]])
-        self._label_to_position = self._build_label_to_position_index()
+        self._x_index_to_position = self._build_x_index_to_position_index()
 
         if self.x_indices_labeled.shape[0] != np.unique(self.x_indices_labeled).shape[0]:
             raise ValueError('Duplicate indices detected in the labeled pool! '
@@ -257,15 +257,15 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
         ----------
         x_index : int
             Data index (relative to `self.x_train`) for which the label should be updated.
-        y : int
-            The new label to be assigned for `self.x_indices_labeled[x_index]`.
+        y : int or numpy.ndarray
+            The new label(s) to be assigned for the sample at `self.x_indices_labeled[x_index]`.
         retrain : bool
             Retrains the model after the update if True.
         x_indices_validation : numpy.ndarray
             The given indices (relative to `self.x_indices_labeled`) define a custom validation set
             if provided. This is only used if `retrain` is `True`.
         """
-        position = self._label_to_position[x_index]
+        position = self._x_index_to_position[x_index]
         self.y[position] = y
 
         if retrain:
@@ -291,7 +291,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             if provided. This is only used if `retrain` is `True`.
         """
 
-        position = self._label_to_position[x_index]
+        position = self._x_index_to_position[x_index]
         self.y = remove_by_index(self.y, position)
         self.x_indices_labeled = np.delete(self.x_indices_labeled, position)
 
@@ -321,9 +321,9 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
             if provided. This is only used if `retrain` is `True`.
         """
 
-        labeling_exists = x_index in self._label_to_position
+        labeling_exists = x_index in self._x_index_to_position
         if labeling_exists:
-            position = self._label_to_position[x_index]
+            position = self._x_index_to_position[x_index]
             self.y = remove_by_index(self.y, position)
             self.x_indices_labeled = np.delete(self.x_indices_labeled, position)
 
@@ -399,7 +399,7 @@ class PoolBasedActiveLearner(AbstractPoolBasedActiveLearner):
 
             self._clf.fit(x_train, validation_set=x_valid)
 
-    def _build_label_to_position_index(self):
+    def _build_x_index_to_position_index(self):
         return dict({
             x_index: position for position, x_index in enumerate(self.x_indices_labeled)
         })

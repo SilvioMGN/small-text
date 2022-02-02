@@ -133,9 +133,9 @@ class ExpectedGradientLength(QueryStrategy):
 
 @constraints(classification_type='single-label')
 class ExpectedGradientLengthMaxWord(ExpectedGradientLength):
-    """Selects instances using the EGL-word model [ZLW17]_.
+    """Selects instances using the EGL-word strategy [ZLW17]_.
 
-    The EGL-word model works as follows:
+    The EGL-word strategy works as follows:
 
     1. For every instance and class the gradient norm is computed per word.
        The score for each (instance, class) pair is the norm of the word with the

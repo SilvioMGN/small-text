@@ -25,7 +25,7 @@ try:
     import torch
     import torch.nn.functional as F
 
-    from transformers import AdamW
+    from torch.optim import AdamW
     from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 
     from small_text.integrations.pytorch.classifiers.base import PytorchClassifier

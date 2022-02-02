@@ -48,7 +48,7 @@ class _ClassifierBaseFunctionalityTest(object):
             self.assertTrue(np.issubdtype(proba.dtype, np.float))
 
 
-class SklearnClassifierSingleLabelTest(unittest.TestCase,_ClassifierBaseFunctionalityTest):
+class SklearnClassifierSingleLabelTest(unittest.TestCase, _ClassifierBaseFunctionalityTest):
 
     def _get_clf(self):
         return SklearnClassifier(ConfidenceEnhancedLinearSVC(), 2)
@@ -68,7 +68,7 @@ class SklearnClassifierSingleLabelTest(unittest.TestCase,_ClassifierBaseFunction
             clf.fit(train_set)
 
 
-class SklearnClassifierMultiLabelTest(unittest.TestCase,_ClassifierBaseFunctionalityTest):
+class SklearnClassifierMultiLabelTest(unittest.TestCase, _ClassifierBaseFunctionalityTest):
 
     def _get_clf(self):
         return SklearnClassifier(ConfidenceEnhancedLinearSVC(),
