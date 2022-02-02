@@ -109,5 +109,13 @@ API
 :doc:`api/data_set`
 
 
+.. toctree::
+   :caption: Development
+   :maxdepth: 0
+   :hidden:
+
+   changelog
+
+
 ----
 :ref:`genindex` | :ref:`modindex` | :ref:`search`
