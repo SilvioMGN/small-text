@@ -11,6 +11,16 @@ from tests.utils.datasets import random_sklearn_dataset
 
 class SklearnClassifierFactoryTest(unittest.TestCase):
 
+    def test_init_with_invalid_estimator(self):
+        class MyCustomEstimator(object):
+            pass
+
+        base_estimator = MyCustomEstimator()
+        num_classes = 2
+
+        with self.assertRaisesRegex(ValueError, 'Given classifier template must be a subclass'):
+            SklearnClassifierFactory(base_estimator, num_classes)
+
     def test_new(self):
         base_estimator = LinearSVC()
         num_classes = 2

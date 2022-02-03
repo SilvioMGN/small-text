@@ -115,7 +115,7 @@ class TestTransformerBasedClassification(unittest.TestCase):
 
         model_args = TransformerModelArguments('bert-base-uncased')
         classifier = TransformerBasedClassification(model_args, 2)
-        with self.assertRaisesRegex(ValueError, 'Training labels must be labeled'):
+        with self.assertRaisesRegex(ValueError, 'Training set labels must be labeled'):
             classifier.fit(train_set)
 
     def test_fit_where_y_valid_is_negative(self):

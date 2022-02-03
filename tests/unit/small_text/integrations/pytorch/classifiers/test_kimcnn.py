@@ -148,7 +148,7 @@ class KimCNNTest(unittest.TestCase):
 
         classifier = self._get_clf()
 
-        with self.assertRaisesRegex(ValueError, 'Training labels must be labeled'):
+        with self.assertRaisesRegex(ValueError, 'Training set labels must be labeled'):
             classifier.fit(train_set)
 
     def test_fit_where_y_valid_is_negative(self):
