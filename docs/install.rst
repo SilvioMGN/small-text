@@ -36,6 +36,7 @@ To enable the Pytorch Integration, install the library with the `pytorch` extra:
 
     pip install small-text[pytorch]
 
+.. note:: After installation, make sure the installed `torchtext and Pytorch versions are compatible <https://github.com/pytorch/text#installation>`_.
 
 .. _installation-transformers:
 

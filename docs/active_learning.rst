@@ -25,9 +25,10 @@ An :doc:`initalization strategy<components/initialization>`,
 a :doc:`query strategy<components/query_strategies>`,
 and (optionally) a :doc:`stopping criterion<components/stopping_criteria>`.
 
+----
 
-References
-==========
+**References**
+
 .. [Set10] Burr Settles. 2010.
    Active Learning Literature Survey.
    Computer Sciences Technical Report 1648.
