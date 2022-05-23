@@ -355,7 +355,9 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
                                                                  scheduler,
                                                                  self.num_epochs,
                                                                  sub_train)
-        self.model = self.model.to(self.device)
+
+        self.model = torch.nn.DataParallel(self.model)
+        self.model.to(self.device)
 
         with tempfile.TemporaryDirectory(dir=get_tmp_dir_base()) as tmp_dir:
             res = self._train(sub_train, sub_valid, tmp_dir, optimizer, scheduler)
