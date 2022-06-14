@@ -645,3 +645,185 @@ class TransformerBasedClassification(TransformerBasedEmbeddingMixin, PytorchClas
                 delattr(self, attr)
         except Exception:
             pass
+
+    '''
+
+    Effective Deep Learning Implementation (Survoy (?) et al. - Kaplan)
+
+    def _compute_loss(self, cls, outputs, epoch):
+
+        if self.num_classes == 2:
+            logits = outputs.logits
+            target = F.one_hot(cls, 2).float()
+        else:
+            logits = outputs.logits.view(-1, self.num_classes)
+            target = cls
+        
+        
+        evidence = F.relu(logits)
+        alpha = evidence + 1
+        
+
+        # Ich glaube, dass annealing_step = die num_classes ist -> das nehmen wir jetzt mal an
+
+        y = F.one_hot(cls, self.num_classes).float() # = target
+
+
+        #KL Divergence:
+        def kl_divergence(alpha, num_classes):
+            ones = torch.ones([1, num_classes], dtype=torch.float32, device=self.device)
+            sum_alpha = torch.sum(alpha, dim=1, keepdim=True)
+            first_term = (
+                torch.lgamma(sum_alpha)
+                - torch.lgamma(alpha).sum(dim=1, keepdim=True)
+                + torch.lgamma(ones).sum(dim=1, keepdim=True)
+                - torch.lgamma(ones.sum(dim=1, keepdim=True))
+            )
+            second_term = (
+                (alpha - ones)
+                .mul(torch.digamma(alpha) - torch.digamma(sum_alpha))
+                .sum(dim=1, keepdim=True)
+            )
+            kl = first_term + second_term
+            
+            return kl
+
+
+        # Loglikelihood loss
+        
+        def loglikelihood_loss(y, alpha):
+            
+            y = y.to(self.device)
+            alpha = alpha.to(self.device)
+            S = torch.sum(alpha, dim=1, keepdim=True)
+            loglikelihood_err = torch.sum((y - (alpha / S)) ** 2, dim=1, keepdim=True)
+            loglikelihood_var = torch.sum(
+                alpha * (S - alpha) / (S * S * (S + 1)), dim=1, keepdim=True
+            )
+            loglikelihood = loglikelihood_err + loglikelihood_var
+            
+            return loglikelihood
+
+    
+
+        def mse_loss(y, alpha, epoch_num, num_classes, annealing_step):
+            
+            y = y.to(self.device)
+            alpha = alpha.to(self.device)
+            loglikelihood = loglikelihood_loss(y, alpha)
+
+            annealing_coef = torch.min(
+                torch.tensor(1.0, dtype=torch.float32),
+                torch.tensor(epoch_num / annealing_step, dtype=torch.float32),
+            )
+
+            kl_alpha = (alpha - 1) * (1 - y) + 1
+            kl_div = annealing_coef * kl_divergence(kl_alpha, num_classes)
+           
+            return loglikelihood + kl_div
+
+        
+
+
+        loss = torch.mean(mse_loss(y=y, alpha=alpha, epoch_num=epoch, num_classes=self.num_classes, annealing_step=10))
+        
+        #loss = self.criterion(logits, target)
+
+        return logits, loss
+    '''
+
+
+
+
+
+    ''' def inhibitedSoftmax(self, logits):
+
+        logits = logits.cpu()
+        exponentials = np.exp(logits)
+        sum_exponentials = torch.sum(exponentials, 1)
+
+        result = []
+
+        for i in range(len(sum_exponentials)):
+            preResult = exponentials[i]/sum_exponentials[i]
+
+            result.append(preResult.tolist())
+
+        return result'''
+
+    '''
+    Taylor Softmax Function implementation:
+    
+    def taylorSoftmax(self, logits):
+        logits = logits.cpu()
+        #exponentials = np.exp(logits)
+        #sum_exponentials = torch.sum(exponentials, 1)
+
+        taylorApprox = 1 + logits + 0.5 * (logits ** 2)
+        sum_taylorApprox = torch.sum(taylorApprox, 1)
+        result = []
+
+        for i in range(len(sum_taylorApprox)):
+            preResult = taylorApprox[i]/sum_taylorApprox[i]
+
+            result.append(preResult.tolist())
+            #result = exponentials/sum_exponentials
+        
+        #print("result: ")
+        #print(result)
+        #print(torch.tensor(result))
+
+        return result'''
+
+    '''
+    Predict_Proba for Temp. Scaling implementation:
+
+    def predict_proba(self, test_set):
+        if len(test_set) == 0:
+            return empty_result(self.multi_label, self.num_classes, return_prediction=False,
+                                return_proba=True)
+
+        self.model.eval()
+        test_iter = dataloader(test_set.data, self.mini_batch_size, self._create_collate_fn(),
+                               train=False)
+
+        predictions = []
+        logits_transform = torch.sigmoid if self.multi_label else partial(F.softmax, dim=1)
+
+        optimizer = torch.optim.LBFGS([self.temperature], lr=0.01, max_iter=50)
+        nll_criterion = torch.nn.CrossEntropyLoss().cuda()
+
+        logging.info("temp: ")
+        logging.info(self.temperature)
+
+
+        with torch.no_grad():
+            for text, masks, label in test_iter:
+
+                text, masks, label = text.to(self.device), masks.to(self.device), label.to(self.device)
+                outputs = self.model(text, attention_mask=masks)                 
+
+                def eval():
+                    optimizer.zero_grad()
+                    
+                    loss = nll_criterion(self._temperature_scale(outputs.logits), label)
+                    loss.backward()
+                    return loss
+
+                optimizer.step(eval)
+
+                predictions += logits_transform(self._temperature_scale(outputs.logits)).to('cpu').tolist()
+
+
+                del text, masks
+                
+        return np.array(predictions)
+
+    def _temperature_scale(self, logits):
+        if self.temperature.data < 0:
+            self.temperature = torch.nn.Parameter(torch.ones(1).cuda() * 1.5)
+        temperature = self.temperature.unsqueeze(1).expand(logits.size(0), logits.size(1)).to(self.device)
+        return logits/temperature
+
+    '''
+
